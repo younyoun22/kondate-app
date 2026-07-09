@@ -195,6 +195,34 @@
     color: var(--carbon-navy);
   }
 
+  .segment-group {
+    display: flex;
+    gap: 6px;
+  }
+  .segment-btn {
+    flex: 1;
+    background: var(--platinum);
+    color: var(--carbon-navy);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 9px 4px;
+    cursor: pointer;
+    border-top: 2px solid rgba(255,255,255,0.9);
+    border-bottom: 2px solid var(--chrome-indigo);
+    border-left: 1px solid var(--chrome-indigo);
+    border-right: 1px solid var(--chrome-indigo);
+    text-align: center;
+  }
+  .segment-btn:active { transform: translateY(1px); }
+  .segment-btn.is-active {
+    background: var(--nintendo-red);
+    color: var(--white);
+    box-shadow: inset 0 0 0 2px var(--carbon-navy);
+    border-bottom-color: #8a000c;
+  }
+
   .btn {
     display: block;
     width: 100%;
@@ -663,6 +691,23 @@
       <input type="checkbox" id="weekend-toggle">
       <label for="weekend-toggle">どようび・にちようびも つくる</label>
     </div>
+    <div class="field">
+      <label>じかん</label>
+      <div class="segment-group" id="time-filter-group">
+        <button type="button" class="segment-btn" data-value="busy">いそぎ(〜10ふん)</button>
+        <button type="button" class="segment-btn" data-value="normal">ふつう(〜20ふん)</button>
+        <button type="button" class="segment-btn is-active" data-value="any">なんでも</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>にんずう</label>
+      <div class="segment-group" id="people-group">
+        <button type="button" class="segment-btn" data-value="1">1にん</button>
+        <button type="button" class="segment-btn is-active" data-value="2">2にん</button>
+        <button type="button" class="segment-btn" data-value="3">3にん</button>
+        <button type="button" class="segment-btn" data-value="4">4にん</button>
+      </div>
+    </div>
     <button class="btn btn-primary" id="generate-btn">こんだてを つくる!</button>
     <button class="btn btn-secondary" id="single-day-btn">きょうの ぶんだけ</button>
   </div>
@@ -712,6 +757,8 @@
   const HISTORY_KEY = "kondate-app-history-v3";
   const HISTORY_MAX_GENERATIONS = 2;
   const POKEMON_MAX_ID = 1025;
+  const TIME_FILTER_VALUES = ["busy", "normal", "any"];
+  const PEOPLE_VALUES = [1, 2, 3, 4];
 
   // 分量なしで「あるか確認する」だけの調味料・常備品まとめ枠に振り分ける食材名
   const SEASONINGS = [
@@ -734,11 +781,15 @@
   const seasoningList = document.getElementById("seasoning-list");
   const pokeContent = document.getElementById("poke-content");
   const singleDayBtn = document.getElementById("single-day-btn");
+  const timeFilterGroup = document.getElementById("time-filter-group");
+  const peopleGroup = document.getElementById("people-group");
 
   // currentMenu: { days: [{dayIndex, keep, keeps:{main,side,soup}, main, side, soup}], includeWeekend, weekStart(ISO), isSingleDay }
   let currentMenu = null;
   let checkedSet = {}; // 買い物リストのチェック状態 "reg:食材名" / "sea:食材名" -> true
   let shoppingCategoryFilter = "all"; // 買い物リストのカテゴリ絞り込み: "all" / "main" / "side" / "soup"
+  let timeFilter = "any"; // 献立生成に使う時間しばり: "busy"(〜10分) / "normal"(〜20分) / "any"(なんでも)
+  let numPeople = 2; // 表示・買い物リストのスケーリングに使う人数(1〜4)。recipes.jsの分量は2人分基準
 
   // ---------- ユーティリティ ----------
 
@@ -915,55 +966,73 @@
   // ---------- 献立生成ロジック ----------
 
   // presetDishes: { main?, side?, soup? } を渡すと、そのカテゴリは抽選せずそのまま採用する(料理単位キープ用)
-  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, presetDishes) {
+  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, presetDishes, timeFilterValue) {
     const preset = presetDishes || {};
     const mains = getRecipesByCategory("main");
     const sides = getRecipesByCategory("side");
     const soups = getRecipesByCategory("soup");
 
-    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet);
+    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet, timeFilterValue);
     usedNames.add(main.name);
-    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet);
+    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet, timeFilterValue);
     usedNames.add(side.name);
-    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet);
+    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet, timeFilterValue);
     usedNames.add(soup.name);
 
     return { main, side, soup };
   }
 
-  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet) {
-    // 週内で既に選ばれているレシピは除外(プールが尽きた場合は除外を緩める)
-    let basePool = pool.filter(r => !usedNames.has(r.name));
-    if (basePool.length === 0) basePool = pool;
+  // じかんしばりの段階的な緩め順。「いそぎ」は10分→20分→無制限、「ふつう」は20分→無制限、「なんでも」は無制限のみ
+  function timeThresholdsFor(timeFilterValue) {
+    if (timeFilterValue === "busy") return [10, 20, Infinity];
+    if (timeFilterValue === "normal") return [20, Infinity];
+    return [Infinity];
+  }
 
-    // 過去2回の生成で使ったレシピもソフト除外(候補が尽きたら緩めて許可する)
-    if (historySet && historySet.size > 0) {
-      const historyFreePool = basePool.filter(r => !historySet.has(r.name));
-      if (historyFreePool.length > 0) basePool = historyFreePool;
-    }
+  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet, timeFilterValue) {
+    const thresholds = timeThresholdsFor(timeFilterValue);
 
-    let candidates = shuffle(basePool);
+    for (let t = 0; t < thresholds.length; t++) {
+      const threshold = thresholds[t];
+      const timePool = threshold === Infinity ? pool : pool.filter(r => r.time <= threshold);
+      if (timePool.length === 0) continue; // このしきい値では候補なし→さらに緩める
 
-    // 1. 指定食材にマッチするものを最優先
-    if (keywords.length > 0) {
-      const matched = candidates.filter(r => keywords.some(kw => containsIngredient(r, kw)));
-      if (matched.length > 0) {
-        candidates = matched.concat(candidates.filter(r => !matched.includes(r)));
+      // 週内で既に選ばれているレシピは除外(プールが尽きた場合は除外を緩める)
+      let basePool = timePool.filter(r => !usedNames.has(r.name));
+      if (basePool.length === 0) basePool = timePool;
+
+      // 過去2回の生成で使ったレシピもソフト除外(候補が尽きたら緩めて許可する)
+      if (historySet && historySet.size > 0) {
+        const historyFreePool = basePool.filter(r => !historySet.has(r.name));
+        if (historyFreePool.length > 0) basePool = historyFreePool;
       }
+
+      let candidates = shuffle(basePool);
+
+      // 1. 指定食材にマッチするものを最優先
+      if (keywords.length > 0) {
+        const matched = candidates.filter(r => keywords.some(kw => containsIngredient(r, kw)));
+        if (matched.length > 0) {
+          candidates = matched.concat(candidates.filter(r => !matched.includes(r)));
+        }
+      }
+
+      // 2. 主菜のみ: 直近と同じたんぱく源・ジャンルを避ける
+      if (isMain) {
+        const avoided = candidates.filter(r =>
+          !usedProteins.includes(r.protein) && !usedGenres.includes(r.genre)
+        );
+        if (avoided.length > 0) return avoided[0];
+
+        const partiallyAvoided = candidates.filter(r => !usedProteins.includes(r.protein));
+        if (partiallyAvoided.length > 0) return partiallyAvoided[0];
+      }
+
+      return candidates[0];
     }
 
-    // 2. 主菜のみ: 直近と同じたんぱく源・ジャンルを避ける
-    if (isMain) {
-      const avoided = candidates.filter(r =>
-        !usedProteins.includes(r.protein) && !usedGenres.includes(r.genre)
-      );
-      if (avoided.length > 0) return avoided[0];
-
-      const partiallyAvoided = candidates.filter(r => !usedProteins.includes(r.protein));
-      if (partiallyAvoided.length > 0) return partiallyAvoided[0];
-    }
-
-    return candidates[0];
+    // 理論上ここには来ない(全カテゴリに時間無制限の候補が必ず存在する)が、保険としてプール全体から選ぶ
+    return shuffle(pool)[0];
   }
 
   function generateMenu() {
@@ -1013,7 +1082,7 @@
         day = kept;
       } else {
         const partial = partialKeepMap.get(i);
-        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet, partial ? partial.preset : null);
+        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet, partial ? partial.preset : null, timeFilter);
         const keeps = partial ? partial.keeps : { main: false, side: false, soup: false };
         day = { dayIndex: i, keep: false, keeps: keeps, ...dishes };
       }
@@ -1042,7 +1111,7 @@
     const historySet = getHistorySet();
     const usedNames = new Set();
 
-    const dishes = pickDayDishes([], [], keywords, usedNames, historySet);
+    const dishes = pickDayDishes([], [], keywords, usedNames, historySet, null, timeFilter);
     const day = { dayIndex: 0, keep: false, keeps: { main: false, side: false, soup: false }, ...dishes };
 
     currentMenu = { days: [day], includeWeekend: false, weekStart: todayISO, isSingleDay: true };
@@ -1078,7 +1147,7 @@
     if (keeps.soup) preset.soup = day.soup;
 
     const historySet = getHistorySet();
-    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, preset);
+    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, preset, timeFilter);
     const idx = currentMenu.days.indexOf(day);
     currentMenu.days[idx] = { dayIndex, keep: false, keeps: keeps, main: dishes.main, side: dishes.side, soup: dishes.soup };
     resetCheckedState();
@@ -1141,11 +1210,11 @@
     return "https://www.google.com/search?q=" + query;
   }
 
-  function formatDishIngredients(dish) {
-    return dish.ingredients.map(ing => ing.n + " " + ing.a).join("・");
+  function formatDishIngredients(dish, people) {
+    return dish.ingredients.map(ing => ing.n + " " + scaleAmountString(ing.a, people)).join("・");
   }
 
-  function renderDish(dish, dayIndex, dayKept, dishKept) {
+  function renderDish(dish, dayIndex, dayKept, dishKept, people) {
     const keepBtnHtml = dayKept ? "" : (
       '<button class="dish-keep-btn' + (dishKept ? ' is-active' : '') + '" data-day="' + dayIndex + '" data-cat="' + dish.category + '" aria-label="' +
         (dishKept ? 'この料理のキープを解除' : 'この料理をキープ') + '">' +
@@ -1158,7 +1227,7 @@
           '<span class="dish-cat-badge ' + categoryBadgeClass(dish.category) + '">' + categoryLabel(dish.category) + '</span>' +
           '<span class="genre-badge">' + dish.genre + '</span>' +
           '<span class="dish-name">' + escapeHtml(dish.name) + '</span>' +
-          '<div class="dish-ingredients">材料(2人分): ' + escapeHtml(formatDishIngredients(dish)) + '</div>' +
+          '<div class="dish-ingredients">材料(' + people + '人分): ' + escapeHtml(formatDishIngredients(dish, people)) + '</div>' +
           '<div class="dish-memo">' + escapeHtml(dish.memo) + '</div>' +
         '</div>' +
         '<div class="dish-actions">' +
@@ -1200,9 +1269,9 @@
               '<button class="reroll-btn" data-day="' + day.dayIndex + '"' + (kept ? ' disabled' : '') + '>ひきなおす</button>' +
             '</div>' +
           '</div>' +
-          renderDish(day.main, day.dayIndex, kept, !!(day.keeps && day.keeps.main)) +
-          renderDish(day.side, day.dayIndex, kept, !!(day.keeps && day.keeps.side)) +
-          renderDish(day.soup, day.dayIndex, kept, !!(day.keeps && day.keeps.soup)) +
+          renderDish(day.main, day.dayIndex, kept, !!(day.keeps && day.keeps.main), numPeople) +
+          renderDish(day.side, day.dayIndex, kept, !!(day.keeps && day.keeps.side), numPeople) +
+          renderDish(day.soup, day.dayIndex, kept, !!(day.keeps && day.keeps.soup), numPeople) +
         '</div>'
       );
     }).join("");
@@ -1274,6 +1343,13 @@
     return { num: num / g, den: den / g };
   }
 
+  function mulFrac(a, b) {
+    const num = a.num * b.num;
+    const den = a.den * b.den;
+    const g = gcd(num, den);
+    return { num: num / g, den: den / g };
+  }
+
   function formatFrac(f) {
     let num = f.num;
     let den = f.den;
@@ -1284,6 +1360,39 @@
     if (whole === 0) return rem + "/" + den;
     if (rem === 0) return String(whole);
     return whole + "と" + rem + "/" + den;
+  }
+
+  // ---------- 分量の人数スケーリング ----------
+
+  // 「1」「1/2」「1.5」に加えて「1と1/2」のような帯分数表記もfrac({num,den})へ変換する
+  function parseMixedFraction(numToken) {
+    if (numToken.indexOf("と") !== -1) {
+      const parts = numToken.split("と");
+      const whole = parseFractionPart(parts[0]);
+      const frac = parseFractionPart(parts[1]);
+      if (!whole || !frac) return null;
+      return addFrac(whole, frac);
+    }
+    return parseFractionPart(numToken);
+  }
+
+  // 文字列内の数値トークンをすべて人数比率(numPeople/2)倍にスケールする。
+  // g/ml/kgの直後の数値は四捨五入で整数化、それ以外は既存のformatFracで分数表記に整形する。
+  // 「大さじ1.5」「1/2個」「1枚(約300g)」のようにトークンが複数含まれる文字列にも対応する。
+  const AMOUNT_NUMBER_RE = /(\d+と\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+)(g|ml|kg)?/g;
+
+  function scaleAmountString(amountStr, people) {
+    const s = amountStr || "";
+    const multiplier = { num: people, den: 2 }; // recipes.jsの分量は2人分基準
+    return s.replace(AMOUNT_NUMBER_RE, (match, numToken, unit) => {
+      const frac = parseMixedFraction(numToken);
+      if (!frac) return match;
+      const scaled = mulFrac(frac, multiplier);
+      if (unit === "g" || unit === "ml" || unit === "kg") {
+        return String(Math.round(scaled.num / scaled.den)) + unit;
+      }
+      return formatFrac(scaled) + (unit || "");
+    });
   }
 
   // 分量の文字列を解析。「数値+単位」「大さじ/小さじ+数値」ならkindを返し、
@@ -1357,7 +1466,8 @@
             seasoningSet.add(ing.n);
           } else {
             if (!regularMap.has(ing.n)) regularMap.set(ing.n, []);
-            regularMap.get(ing.n).push(ing.a);
+            // 買い物リストはスケール後の分量を合算する(2人分基準の生値ではなく人数調整後の値を集計)
+            regularMap.get(ing.n).push(scaleAmountString(ing.a, numPeople));
           }
         });
       });
@@ -1402,24 +1512,35 @@
 
   function saveState() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ menu: currentMenu, checked: checkedSet }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        menu: currentMenu,
+        checked: checkedSet,
+        timeFilter: timeFilter,
+        numPeople: numPeople
+      }));
     } catch (e) {
       // 保存に失敗しても致命的ではないので無視
     }
   }
 
+  // menuが無くても(まだ献立未生成でも)じかん・にんずうの設定だけは復元できるようにする
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.menu && Array.isArray(parsed.menu.days)) {
-        return {
-          menu: parsed.menu,
-          checked: (parsed.checked && typeof parsed.checked === "object") ? parsed.checked : {}
-        };
+      if (!parsed || typeof parsed !== "object") return null;
+
+      const result = {
+        menu: null,
+        checked: (parsed.checked && typeof parsed.checked === "object") ? parsed.checked : {},
+        timeFilter: TIME_FILTER_VALUES.indexOf(parsed.timeFilter) !== -1 ? parsed.timeFilter : "any",
+        numPeople: PEOPLE_VALUES.indexOf(parsed.numPeople) !== -1 ? parsed.numPeople : 2
+      };
+      if (parsed.menu && Array.isArray(parsed.menu.days)) {
+        result.menu = parsed.menu;
       }
-      return null;
+      return result;
     } catch (e) {
       return null;
     }
@@ -1588,15 +1709,48 @@
     });
   });
 
+  function setActiveSegment(groupEl, value) {
+    groupEl.querySelectorAll(".segment-btn").forEach(b => {
+      b.classList.toggle("is-active", b.getAttribute("data-value") === String(value));
+    });
+  }
+
+  timeFilterGroup.querySelectorAll(".segment-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      timeFilter = btn.getAttribute("data-value");
+      setActiveSegment(timeFilterGroup, timeFilter);
+      saveState();
+    });
+  });
+
+  peopleGroup.querySelectorAll(".segment-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      numPeople = parseInt(btn.getAttribute("data-value"), 10);
+      setActiveSegment(peopleGroup, numPeople);
+      saveState();
+      // 人数変更は再生成せず、その場で表示(材料・買い物リスト)だけ再計算する。チェック状態はcheckedSetのまま維持される
+      renderMenu();
+    });
+  });
+
   const saved = loadState();
   if (saved) {
-    currentMenu = saved.menu;
-    checkedSet = saved.checked;
-    if (!currentMenu.isSingleDay) {
-      weekendToggle.checked = !!currentMenu.includeWeekend;
+    timeFilter = saved.timeFilter;
+    numPeople = saved.numPeople;
+    setActiveSegment(timeFilterGroup, timeFilter);
+    setActiveSegment(peopleGroup, numPeople);
+
+    if (saved.menu) {
+      currentMenu = saved.menu;
+      checkedSet = saved.checked;
+      if (!currentMenu.isSingleDay) {
+        weekendToggle.checked = !!currentMenu.includeWeekend;
+      }
+      renderMenu();
+      fetchPokemon();
+    } else {
+      renderPokemonPlaceholder();
     }
-    renderMenu();
-    fetchPokemon();
   } else {
     renderPokemonPlaceholder();
   }
