@@ -659,6 +659,103 @@
     margin: 16px;
   }
 
+  /* ===== 旬バッジ ===== */
+  .season-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    margin-left: 6px;
+    background: var(--amber);
+    color: var(--carbon-navy);
+    vertical-align: middle;
+  }
+
+  /* ===== さける食材(入力・チップ) ===== */
+  .avoid-input-row {
+    display: flex;
+    gap: 6px;
+  }
+  .avoid-input-row input[type="text"] {
+    flex: 1;
+    width: auto;
+  }
+  .avoid-input-row .btn-secondary {
+    width: auto;
+    padding: 0 14px;
+    margin-top: 0;
+    flex-shrink: 0;
+  }
+  .avoid-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .avoid-chip-list:empty { margin-top: 0; }
+  .avoid-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--platinum);
+    color: var(--carbon-navy);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 6px 5px 10px;
+    border: 1px solid var(--chrome-indigo);
+  }
+  .avoid-chip button {
+    background: var(--nintendo-red);
+    color: var(--white);
+    border: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .avoid-chip button:active { transform: translateY(1px); }
+
+  /* ===== さしかえ確認バー ===== */
+  .confirm-bar {
+    margin: 0 16px 16px;
+    background: linear-gradient(180deg, #fff3d6 0%, #ffe6b0 100%);
+    border-top: 2px solid rgba(255,255,255,0.9);
+    border-bottom: 3px solid var(--amber);
+    border-left: 1px solid var(--amber);
+    border-right: 1px solid var(--amber);
+    padding: 12px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+  }
+  .confirm-bar-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--carbon-navy);
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+  .confirm-bar-subtext {
+    font-size: 11px;
+    font-weight: 700;
+    color: #7a5c00;
+    margin-bottom: 8px;
+  }
+  .confirm-bar-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .confirm-bar-actions button {
+    flex: 1;
+    min-height: 40px;
+  }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -687,6 +784,14 @@
       <label for="ingredient-input">つかいたい しょくざい(にんにく なす など)</label>
       <input type="text" id="ingredient-input" placeholder="例: 鶏むね肉, なす">
     </div>
+    <div class="field">
+      <label for="avoid-input">さける しょくざい(たかいもの など)</label>
+      <div class="avoid-input-row">
+        <input type="text" id="avoid-input" placeholder="例: なす">
+        <button type="button" class="btn btn-secondary" id="avoid-add-btn">ついか</button>
+      </div>
+      <div class="avoid-chip-list" id="avoid-chip-list"></div>
+    </div>
     <div class="toggle-row">
       <input type="checkbox" id="weekend-toggle">
       <label for="weekend-toggle">どようび・にちようびも つくる</label>
@@ -710,6 +815,15 @@
     </div>
     <button class="btn btn-primary" id="generate-btn">こんだてを つくる!</button>
     <button class="btn btn-secondary" id="single-day-btn">きょうの ぶんだけ</button>
+  </div>
+
+  <div class="confirm-bar hidden" id="avoid-confirm-bar">
+    <div class="confirm-bar-text" id="avoid-confirm-text"></div>
+    <div class="confirm-bar-subtext hidden" id="avoid-confirm-subtext"></div>
+    <div class="confirm-bar-actions">
+      <button type="button" class="btn btn-secondary" id="avoid-confirm-replace-btn">さしかえる</button>
+      <button type="button" class="btn btn-secondary" id="avoid-confirm-keep-btn">そのまま</button>
+    </div>
   </div>
 
   <div class="panel poke-panel" id="poke-panel">
@@ -771,6 +885,23 @@
     "にんにく", "しょうが", "だし", "昆布だし", "昆布茶", "乾燥ハーブ", "お湯"
   ];
 
+  // 月(1〜12) → 旬の食材キーワードのリスト。recipes.js(全260品)に実際に登場する食材名の表記に合わせてある。
+  // 生成時の候補順のソフト優先、および献立カードの「旬」バッジ表示に使う。
+  const SEASONAL = {
+    1: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "さば", "生鮭"],
+    2: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "さば", "たら"],
+    3: ["たけのこ", "アスパラガス", "桜えび", "三つ葉", "あさり", "しじみ", "わかめ", "キャベツ"],
+    4: ["たけのこ", "アスパラガス", "キャベツ", "にら", "三つ葉", "あさり", "しじみ", "わかめ"],
+    5: ["アスパラガス", "にら", "きゅうり", "キャベツ", "ズッキーニ", "オクラ", "あじ", "三つ葉"],
+    6: ["なす", "きゅうり", "ピーマン", "オクラ", "ズッキーニ", "にら", "あじ", "梅干し"],
+    7: ["なす", "トマト", "きゅうり", "ピーマン", "ゴーヤ", "オクラ", "あじ", "ズッキーニ", "みょうが", "枝豆"],
+    8: ["なす", "トマト", "きゅうり", "ピーマン", "ゴーヤ", "オクラ", "あじ", "いわし", "みょうが", "枝豆"],
+    9: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "さんま", "かぼちゃ", "れんこん"],
+    10: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "さんま", "かぼちゃ", "れんこん", "さば", "ごぼう"],
+    11: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "かぼちゃ", "れんこん", "ごぼう", "白菜", "大根", "生鮭"],
+    12: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "生鮭", "かぼちゃ"]
+  };
+
   const ingredientInput = document.getElementById("ingredient-input");
   const weekendToggle = document.getElementById("weekend-toggle");
   const generateBtn = document.getElementById("generate-btn");
@@ -783,6 +914,14 @@
   const singleDayBtn = document.getElementById("single-day-btn");
   const timeFilterGroup = document.getElementById("time-filter-group");
   const peopleGroup = document.getElementById("people-group");
+  const avoidInput = document.getElementById("avoid-input");
+  const avoidAddBtn = document.getElementById("avoid-add-btn");
+  const avoidChipList = document.getElementById("avoid-chip-list");
+  const avoidConfirmBar = document.getElementById("avoid-confirm-bar");
+  const avoidConfirmText = document.getElementById("avoid-confirm-text");
+  const avoidConfirmSubtext = document.getElementById("avoid-confirm-subtext");
+  const avoidConfirmReplaceBtn = document.getElementById("avoid-confirm-replace-btn");
+  const avoidConfirmKeepBtn = document.getElementById("avoid-confirm-keep-btn");
 
   // currentMenu: { days: [{dayIndex, keep, keeps:{main,side,soup}, main, side, soup}], includeWeekend, weekStart(ISO), isSingleDay }
   let currentMenu = null;
@@ -790,6 +929,8 @@
   let shoppingCategoryFilter = "all"; // 買い物リストのカテゴリ絞り込み: "all" / "main" / "side" / "soup"
   let timeFilter = "any"; // 献立生成に使う時間しばり: "busy"(〜10分) / "normal"(〜20分) / "any"(なんでも)
   let numPeople = 2; // 表示・買い物リストのスケーリングに使う人数(1〜4)。recipes.jsの分量は2人分基準
+  let avoidList = []; // さける食材(表示用の生文字列)。マッチングはnormalizeForSearch経由のcontainsIngredientで行う
+  let pendingAvoidConfirm = null; // 確認バー表示中の内容: { term, hits: [{dayIndex, category}] }
 
   // ---------- ユーティリティ ----------
 
@@ -876,6 +1017,17 @@
     const raw = ingredientInput.value.trim();
     if (!raw) return [];
     return raw.split(/[,、\s]+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // 今月(実行時点)の旬食材キーワードを返す
+  function getSeasonalKeywordsForNow() {
+    const month = new Date().getMonth() + 1;
+    return SEASONAL[month] || [];
+  }
+
+  function isSeasonalRecipe(recipe, seasonalKeywords) {
+    if (!seasonalKeywords || seasonalKeywords.length === 0) return false;
+    return seasonalKeywords.some(kw => containsIngredient(recipe, kw));
   }
 
   // ---------- 日付ユーティリティ ----------
@@ -965,18 +1117,27 @@
 
   // ---------- 献立生成ロジック ----------
 
+  // 献立生成に使う各種条件をまとめたオプションを作る(時間しばり・さける食材・今月の旬食材)
+  function currentPickOpts() {
+    return {
+      timeFilterValue: timeFilter,
+      avoidList: avoidList,
+      seasonalKeywords: getSeasonalKeywordsForNow()
+    };
+  }
+
   // presetDishes: { main?, side?, soup? } を渡すと、そのカテゴリは抽選せずそのまま採用する(料理単位キープ用)
-  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, presetDishes, timeFilterValue) {
+  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, presetDishes, opts) {
     const preset = presetDishes || {};
     const mains = getRecipesByCategory("main");
     const sides = getRecipesByCategory("side");
     const soups = getRecipesByCategory("soup");
 
-    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet, timeFilterValue);
+    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet, opts);
     usedNames.add(main.name);
-    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet, timeFilterValue);
+    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet, opts);
     usedNames.add(side.name);
-    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet, timeFilterValue);
+    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet, opts);
     usedNames.add(soup.name);
 
     return { main, side, soup };
@@ -989,7 +1150,11 @@
     return [Infinity];
   }
 
-  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet, timeFilterValue) {
+  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet, opts) {
+    const options = opts || {};
+    const timeFilterValue = options.timeFilterValue;
+    const avoidIngredients = options.avoidList || [];
+    const seasonalKeywords = options.seasonalKeywords || [];
     const thresholds = timeThresholdsFor(timeFilterValue);
 
     for (let t = 0; t < thresholds.length; t++) {
@@ -1007,6 +1172,12 @@
         if (historyFreePool.length > 0) basePool = historyFreePool;
       }
 
+      // さける食材はハード寄りで除外(候補が尽きる場合のみ最終手段として緩める)
+      if (avoidIngredients.length > 0) {
+        const avoidFreePool = basePool.filter(r => !avoidIngredients.some(term => containsIngredient(r, term)));
+        if (avoidFreePool.length > 0) basePool = avoidFreePool;
+      }
+
       let candidates = shuffle(basePool);
 
       // 1. 指定食材にマッチするものを最優先
@@ -1014,6 +1185,14 @@
         const matched = candidates.filter(r => keywords.some(kw => containsIngredient(r, kw)));
         if (matched.length > 0) {
           candidates = matched.concat(candidates.filter(r => !matched.includes(r)));
+        }
+      }
+
+      // 1.5 指定食材の次に、今月の旬食材を含むレシピをソフトに前へ出す
+      if (seasonalKeywords.length > 0) {
+        const seasonal = candidates.filter(r => isSeasonalRecipe(r, seasonalKeywords));
+        if (seasonal.length > 0) {
+          candidates = seasonal.concat(candidates.filter(r => !seasonal.includes(r)));
         }
       }
 
@@ -1082,7 +1261,7 @@
         day = kept;
       } else {
         const partial = partialKeepMap.get(i);
-        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet, partial ? partial.preset : null, timeFilter);
+        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet, partial ? partial.preset : null, currentPickOpts());
         const keeps = partial ? partial.keeps : { main: false, side: false, soup: false };
         day = { dayIndex: i, keep: false, keeps: keeps, ...dishes };
       }
@@ -1111,7 +1290,7 @@
     const historySet = getHistorySet();
     const usedNames = new Set();
 
-    const dishes = pickDayDishes([], [], keywords, usedNames, historySet, null, timeFilter);
+    const dishes = pickDayDishes([], [], keywords, usedNames, historySet, null, currentPickOpts());
     const day = { dayIndex: 0, keep: false, keeps: { main: false, side: false, soup: false }, ...dishes };
 
     currentMenu = { days: [day], includeWeekend: false, weekStart: todayISO, isSingleDay: true };
@@ -1147,7 +1326,7 @@
     if (keeps.soup) preset.soup = day.soup;
 
     const historySet = getHistorySet();
-    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, preset, timeFilter);
+    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, preset, currentPickOpts());
     const idx = currentMenu.days.indexOf(day);
     currentMenu.days[idx] = { dayIndex, keep: false, keeps: keeps, main: dishes.main, side: dishes.side, soup: dishes.soup };
     resetCheckedState();
@@ -1189,6 +1368,137 @@
     checkedSet = {};
   }
 
+  // ---------- さける食材(除外)・ピンポイント差し替え ----------
+
+  function renderAvoidChips() {
+    avoidChipList.innerHTML = avoidList.map((term, idx) =>
+      '<span class="avoid-chip">' + escapeHtml(term) +
+        '<button type="button" data-idx="' + idx + '" aria-label="「' + escapeHtml(term) + '」を さくのを やめる">×</button>' +
+      '</span>'
+    ).join("");
+    avoidChipList.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-idx"), 10);
+        removeAvoidIngredient(idx);
+      });
+    });
+  }
+
+  function addAvoidIngredient(raw) {
+    const term = (raw || "").trim();
+    avoidInput.value = "";
+    if (!term) return;
+
+    const normNew = normalizeForSearch(term);
+    const exists = avoidList.some(t => normalizeForSearch(t) === normNew);
+    if (exists) return;
+
+    avoidList.push(term);
+    saveState();
+    renderAvoidChips();
+    checkAvoidConflict(term);
+  }
+
+  function removeAvoidIngredient(idx) {
+    const removed = avoidList[idx];
+    avoidList.splice(idx, 1);
+    saveState();
+    renderAvoidChips();
+    if (pendingAvoidConfirm && removed && normalizeForSearch(pendingAvoidConfirm.term) === normalizeForSearch(removed)) {
+      hideConfirmBar();
+    }
+  }
+
+  // 表示中の献立にaddした食材を使う料理がないか調べ、あれば確認バーを出す(キープ中の品は差し替え対象から除く)
+  function checkAvoidConflict(term) {
+    if (!currentMenu) return;
+    const hits = []; // 差し替え対象: { dayIndex, category }
+    let keptCount = 0;
+
+    currentMenu.days.forEach(day => {
+      ["main", "side", "soup"].forEach(cat => {
+        const dish = day[cat];
+        if (!dish || !containsIngredient(dish, term)) return;
+        const isKept = !!day.keep || !!(day.keeps && day.keeps[cat]);
+        if (isKept) {
+          keptCount++;
+        } else {
+          hits.push({ dayIndex: day.dayIndex, category: cat });
+        }
+      });
+    });
+
+    if (hits.length === 0) return; // 差し替え対象がなければ確認バーは不要
+    showConfirmBar(term, hits, keptCount);
+  }
+
+  function showConfirmBar(term, hits, keptCount) {
+    pendingAvoidConfirm = { term: term, hits: hits };
+    avoidConfirmText.textContent = hits.length + "品が「" + term + "」をつかっています。さしかえますか?";
+    if (keptCount > 0) {
+      avoidConfirmSubtext.textContent = "キープ中の" + keptCount + "品はそのまま";
+      avoidConfirmSubtext.classList.remove("hidden");
+    } else {
+      avoidConfirmSubtext.textContent = "";
+      avoidConfirmSubtext.classList.add("hidden");
+    }
+    avoidConfirmBar.classList.remove("hidden");
+  }
+
+  function hideConfirmBar() {
+    pendingAvoidConfirm = null;
+    avoidConfirmBar.classList.add("hidden");
+  }
+
+  // 確認バーの「さしかえる」: 対象の料理だけを差し替える。他の日・料理・チェック状態は一切変更しない
+  function performAvoidReplace() {
+    if (!pendingAvoidConfirm || !currentMenu) {
+      hideConfirmBar();
+      return;
+    }
+    const hits = pendingAvoidConfirm.hits;
+    const keywords = parseIngredientKeywords();
+    const historySet = getHistorySet();
+    const opts = currentPickOpts();
+
+    // 差し替え対象以外の現在表示中の料理名は「使用済み」として重複を避ける
+    const usedNames = new Set();
+    currentMenu.days.forEach(day => {
+      ["main", "side", "soup"].forEach(cat => {
+        const dish = day[cat];
+        if (!dish) return;
+        const isHit = hits.some(h => h.dayIndex === day.dayIndex && h.category === cat);
+        if (!isHit) usedNames.add(dish.name);
+      });
+    });
+
+    hits.forEach(hit => {
+      const day = currentMenu.days.find(d => d.dayIndex === hit.dayIndex);
+      if (!day) return;
+      const cat = hit.category;
+      const pool = getRecipesByCategory(cat);
+
+      let usedProteins = [];
+      let usedGenres = [];
+      if (cat === "main") {
+        const prevDay = currentMenu.days.find(d => d.dayIndex === hit.dayIndex - 1);
+        if (prevDay) {
+          usedProteins = [prevDay.main.protein];
+          usedGenres = [prevDay.main.genre];
+        }
+      }
+
+      const newDish = pickBest(pool, usedProteins, usedGenres, keywords, cat === "main", usedNames, historySet, opts);
+      usedNames.add(newDish.name);
+      day[cat] = newDish;
+    });
+
+    // checkedSet(買い物リストのチェック状態)はリセットしない。あえてresetCheckedState()を呼ばない
+    saveState();
+    renderMenu();
+    hideConfirmBar();
+  }
+
   // ---------- 描画 ----------
 
   function categoryLabel(cat) {
@@ -1214,19 +1524,20 @@
     return dish.ingredients.map(ing => ing.n + " " + scaleAmountString(ing.a, people)).join("・");
   }
 
-  function renderDish(dish, dayIndex, dayKept, dishKept, people) {
+  function renderDish(dish, dayIndex, dayKept, dishKept, people, isSeasonal) {
     const keepBtnHtml = dayKept ? "" : (
       '<button class="dish-keep-btn' + (dishKept ? ' is-active' : '') + '" data-day="' + dayIndex + '" data-cat="' + dish.category + '" aria-label="' +
         (dishKept ? 'この料理のキープを解除' : 'この料理をキープ') + '">' +
         (dishKept ? '🔒' : '📌') +
       '</button>'
     );
+    const seasonBadgeHtml = isSeasonal ? '<span class="season-badge">旬</span>' : "";
     return (
       '<div class="dish-row">' +
         '<div class="dish-info">' +
           '<span class="dish-cat-badge ' + categoryBadgeClass(dish.category) + '">' + categoryLabel(dish.category) + '</span>' +
           '<span class="genre-badge">' + dish.genre + '</span>' +
-          '<span class="dish-name">' + escapeHtml(dish.name) + '</span>' +
+          '<span class="dish-name">' + escapeHtml(dish.name) + seasonBadgeHtml + '</span>' +
           '<div class="dish-ingredients">材料(' + people + '人分): ' + escapeHtml(formatDishIngredients(dish, people)) + '</div>' +
           '<div class="dish-memo">' + escapeHtml(dish.memo) + '</div>' +
         '</div>' +
@@ -1255,6 +1566,8 @@
     emptyHint.classList.add("hidden");
     shoppingPanel.classList.remove("hidden");
 
+    const seasonalKeywords = getSeasonalKeywordsForNow();
+
     daysContainer.innerHTML = currentMenu.days.map(day => {
       const dayLabel = formatDayLabel(dayDate(currentMenu, day.dayIndex));
       const kept = !!day.keep;
@@ -1269,9 +1582,9 @@
               '<button class="reroll-btn" data-day="' + day.dayIndex + '"' + (kept ? ' disabled' : '') + '>ひきなおす</button>' +
             '</div>' +
           '</div>' +
-          renderDish(day.main, day.dayIndex, kept, !!(day.keeps && day.keeps.main), numPeople) +
-          renderDish(day.side, day.dayIndex, kept, !!(day.keeps && day.keeps.side), numPeople) +
-          renderDish(day.soup, day.dayIndex, kept, !!(day.keeps && day.keeps.soup), numPeople) +
+          renderDish(day.main, day.dayIndex, kept, !!(day.keeps && day.keeps.main), numPeople, isSeasonalRecipe(day.main, seasonalKeywords)) +
+          renderDish(day.side, day.dayIndex, kept, !!(day.keeps && day.keeps.side), numPeople, isSeasonalRecipe(day.side, seasonalKeywords)) +
+          renderDish(day.soup, day.dayIndex, kept, !!(day.keeps && day.keeps.soup), numPeople, isSeasonalRecipe(day.soup, seasonalKeywords)) +
         '</div>'
       );
     }).join("");
@@ -1516,7 +1829,8 @@
         menu: currentMenu,
         checked: checkedSet,
         timeFilter: timeFilter,
-        numPeople: numPeople
+        numPeople: numPeople,
+        avoidList: avoidList
       }));
     } catch (e) {
       // 保存に失敗しても致命的ではないので無視
@@ -1535,7 +1849,8 @@
         menu: null,
         checked: (parsed.checked && typeof parsed.checked === "object") ? parsed.checked : {},
         timeFilter: TIME_FILTER_VALUES.indexOf(parsed.timeFilter) !== -1 ? parsed.timeFilter : "any",
-        numPeople: PEOPLE_VALUES.indexOf(parsed.numPeople) !== -1 ? parsed.numPeople : 2
+        numPeople: PEOPLE_VALUES.indexOf(parsed.numPeople) !== -1 ? parsed.numPeople : 2,
+        avoidList: Array.isArray(parsed.avoidList) ? parsed.avoidList.filter(t => typeof t === "string" && t.trim()) : []
       };
       if (parsed.menu && Array.isArray(parsed.menu.days)) {
         result.menu = parsed.menu;
@@ -1701,6 +2016,16 @@
   generateBtn.addEventListener("click", generateMenu);
   singleDayBtn.addEventListener("click", generateSingleDayMenu);
 
+  avoidAddBtn.addEventListener("click", () => addAvoidIngredient(avoidInput.value));
+  avoidInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addAvoidIngredient(avoidInput.value);
+    }
+  });
+  avoidConfirmReplaceBtn.addEventListener("click", performAvoidReplace);
+  avoidConfirmKeepBtn.addEventListener("click", hideConfirmBar);
+
   document.querySelectorAll(".shopping-tab").forEach(btn => {
     btn.addEventListener("click", () => {
       shoppingCategoryFilter = btn.getAttribute("data-cat");
@@ -1737,8 +2062,10 @@
   if (saved) {
     timeFilter = saved.timeFilter;
     numPeople = saved.numPeople;
+    avoidList = saved.avoidList;
     setActiveSegment(timeFilterGroup, timeFilter);
     setActiveSegment(peopleGroup, numPeople);
+    renderAvoidChips();
 
     if (saved.menu) {
       currentMenu = saved.menu;
