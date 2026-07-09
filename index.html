@@ -495,20 +495,27 @@
 
   // ---------- 献立生成ロジック ----------
 
-  function pickDayDishes(usedProteins, usedGenres, keywords) {
+  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames) {
     const mains = getRecipesByCategory("main");
     const sides = getRecipesByCategory("side");
     const soups = getRecipesByCategory("soup");
 
-    const main = pickBest(mains, usedProteins, usedGenres, keywords, true);
-    const side = pickBest(sides, [], [], keywords, false);
-    const soup = pickBest(soups, [], [], keywords, false);
+    const main = pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames);
+    usedNames.add(main.name);
+    const side = pickBest(sides, [], [], keywords, false, usedNames);
+    usedNames.add(side.name);
+    const soup = pickBest(soups, [], [], keywords, false, usedNames);
+    usedNames.add(soup.name);
 
     return { main, side, soup };
   }
 
-  function pickBest(pool, usedProteins, usedGenres, keywords, isMain) {
-    let candidates = shuffle(pool);
+  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames) {
+    // 週内で既に選ばれているレシピは除外(プールが尽きた場合は除外を緩める)
+    let basePool = pool.filter(r => !usedNames.has(r.name));
+    if (basePool.length === 0) basePool = pool;
+
+    let candidates = shuffle(basePool);
 
     // 1. 指定食材にマッチするものを最優先
     if (keywords.length > 0) {
@@ -540,9 +547,10 @@
     const days = [];
     let recentProteins = [];
     let recentGenres = [];
+    const usedNames = new Set();
 
     for (let i = 0; i < numDays; i++) {
-      const dishes = pickDayDishes(recentProteins, recentGenres, keywords);
+      const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames);
       days.push({ dayIndex: i, ...dishes });
 
       recentProteins = [dishes.main.protein];
@@ -565,7 +573,18 @@
     const usedProteins = prevDay ? [prevDay.main.protein] : [];
     const usedGenres = prevDay ? [prevDay.main.genre] : [];
 
-    const dishes = pickDayDishes(usedProteins, usedGenres, keywords);
+    // その週の他の日で使用中のレシピ + 引き直し前のその日の3品を除外
+    const oldDay = currentMenu.days[dayIndex];
+    const usedNames = new Set();
+    currentMenu.days.forEach((day, idx) => {
+      if (idx === dayIndex) return;
+      [day.main, day.side, day.soup].forEach(d => usedNames.add(d.name));
+    });
+    if (oldDay) {
+      [oldDay.main, oldDay.side, oldDay.soup].forEach(d => usedNames.add(d.name));
+    }
+
+    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames);
     currentMenu.days[dayIndex] = { dayIndex, ...dishes };
     saveMenu();
     renderMenu();
