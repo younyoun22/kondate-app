@@ -4,7 +4,7 @@
 //  - アイコン画像: cache-first
 //  - 他オリジン(PokeAPI, jsDelivr等): 素通し・キャッシュしない
 
-const CACHE_NAME = "kondate-v1";
+const CACHE_NAME = "kondate-v2";
 
 const NETWORK_FIRST_FILES = ["index.html", "recipes.js", "manifest.json"];
 const CACHE_FIRST_FILES = ["icon-192.png", "icon-512.png", "apple-touch-icon.png"];
