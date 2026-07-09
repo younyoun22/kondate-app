@@ -65,23 +65,36 @@
     gap: 10px;
     border-bottom: 2px solid var(--chrome-indigo);
   }
+  /* モンスターボール見た目(マストヘッドのロゴ・ローディングスピナー共通)。
+     上半分赤・下半分白・中央に黒帯・中央ボタンをCSSのみで表現する */
+  .pokeball-face {
+    position: relative;
+    border-radius: 50%;
+    border: 2px solid var(--carbon-navy);
+    background:
+      linear-gradient(to bottom,
+        var(--nintendo-red) 0%, var(--nintendo-red) 46%,
+        var(--carbon-navy) 46%, var(--carbon-navy) 54%,
+        var(--white) 54%, var(--white) 100%);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.3);
+  }
+  .pokeball-face::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 9px;
+    height: 9px;
+    background: var(--white);
+    border: 2px solid var(--carbon-navy);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
   .logo-ball {
     width: 34px;
     height: 34px;
-    border-radius: 50%;
-    background: var(--white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
     flex-shrink: 0;
-    box-shadow: 0 2px 0 rgba(0,0,0,0.4);
-  }
-  .logo-ball::after {
-    content: "";
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--nintendo-red);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.3), 0 2px 0 rgba(0,0,0,0.4);
   }
   .masthead-title {
     color: var(--white);
@@ -313,31 +326,10 @@
     gap: 12px;
   }
   .poke-ball-spinner {
-    position: relative;
     width: 28px;
     height: 28px;
     flex-shrink: 0;
-    border-radius: 50%;
-    border: 2px solid var(--carbon-navy);
-    background:
-      linear-gradient(to bottom,
-        var(--nintendo-red) 0%, var(--nintendo-red) 46%,
-        var(--carbon-navy) 46%, var(--carbon-navy) 54%,
-        var(--white) 54%, var(--white) 100%);
-    box-shadow: 0 2px 3px rgba(0,0,0,0.3);
     animation: pokeBallBounce 0.9s ease-in-out infinite;
-  }
-  .poke-ball-spinner::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 8px;
-    height: 8px;
-    background: var(--white);
-    border: 2px solid var(--carbon-navy);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
   }
   @keyframes pokeBallBounce {
     0%, 100% { transform: translateY(0) rotate(0deg); }
@@ -554,10 +546,14 @@
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-touch-callout: none;
   }
   .shopping-list li:active,
   .seasoning-list li:active {
     background: #cfd3d3;
+  }
+  .shopping-list li.long-press-active {
+    background: var(--signal-orange);
   }
   .check-mark {
     flex-shrink: 0;
@@ -673,6 +669,22 @@
   }
 
   /* ===== さける食材(入力・チップ) ===== */
+  .avoid-toggle-btn {
+    display: block;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--carbon-navy);
+    cursor: pointer;
+    text-align: left;
+  }
+  .avoid-toggle-content {
+    margin-top: 6px;
+  }
   .avoid-input-row {
     display: flex;
     gap: 6px;
@@ -763,7 +775,7 @@
 <div class="app">
 
   <div class="masthead">
-    <div class="logo-ball"></div>
+    <div class="logo-ball pokeball-face"></div>
     <div class="masthead-title">Kondate System</div>
   </div>
 
@@ -782,15 +794,17 @@
     <div class="panel-title">こんだて せってい</div>
     <div class="field">
       <label for="ingredient-input">つかいたい しょくざい(にんにく なす など)</label>
-      <input type="text" id="ingredient-input" placeholder="例: 鶏むね肉, なす">
+      <input type="text" id="ingredient-input" placeholder="例: 鶏むね肉 なす(スペースで区切って複数OK)">
     </div>
     <div class="field">
-      <label for="avoid-input">さける しょくざい(たかいもの など)</label>
-      <div class="avoid-input-row">
-        <input type="text" id="avoid-input" placeholder="例: なす">
-        <button type="button" class="btn btn-secondary" id="avoid-add-btn">ついか</button>
+      <button type="button" class="avoid-toggle-btn" id="avoid-toggle-btn" aria-expanded="false">▸ さける食材</button>
+      <div class="avoid-toggle-content hidden" id="avoid-toggle-content">
+        <div class="avoid-input-row">
+          <input type="text" id="avoid-input" placeholder="例: なす">
+          <button type="button" class="btn btn-secondary" id="avoid-add-btn">ついか</button>
+        </div>
+        <div class="avoid-chip-list" id="avoid-chip-list"></div>
       </div>
-      <div class="avoid-chip-list" id="avoid-chip-list"></div>
     </div>
     <div class="toggle-row">
       <input type="checkbox" id="weekend-toggle">
@@ -917,6 +931,8 @@
   const avoidInput = document.getElementById("avoid-input");
   const avoidAddBtn = document.getElementById("avoid-add-btn");
   const avoidChipList = document.getElementById("avoid-chip-list");
+  const avoidToggleBtn = document.getElementById("avoid-toggle-btn");
+  const avoidToggleContent = document.getElementById("avoid-toggle-content");
   const avoidConfirmBar = document.getElementById("avoid-confirm-bar");
   const avoidConfirmText = document.getElementById("avoid-confirm-text");
   const avoidConfirmSubtext = document.getElementById("avoid-confirm-subtext");
@@ -930,7 +946,10 @@
   let timeFilter = "any"; // 献立生成に使う時間しばり: "busy"(〜10分) / "normal"(〜20分) / "any"(なんでも)
   let numPeople = 2; // 表示・買い物リストのスケーリングに使う人数(1〜4)。recipes.jsの分量は2人分基準
   let avoidList = []; // さける食材(表示用の生文字列)。マッチングはnormalizeForSearch経由のcontainsIngredientで行う
-  let pendingAvoidConfirm = null; // 確認バー表示中の内容: { term, hits: [{dayIndex, category}] }
+  // 確認バー表示中の内容: { term, hits: [{dayIndex, category}], needsAdd? }
+  // needsAdd=true のときは「さしかえる」タップ時に初めてavoidListへ追加する(買い物リスト長押しフロー用)
+  let pendingAvoidConfirm = null;
+  let avoidSectionOpen = false; // 「さける食材」折りたたみの開閉状態(保存しない・毎回閉じた状態で開始)
 
   // ---------- ユーティリティ ----------
 
@@ -1382,6 +1401,21 @@
         removeAvoidIngredient(idx);
       });
     });
+    renderAvoidToggleLabel();
+  }
+
+  // 「▸ さける食材」トグルボタンの表示更新(登録済みなら件数を付記)
+  function renderAvoidToggleLabel() {
+    const arrow = avoidSectionOpen ? "▾" : "▸";
+    const count = avoidList.length > 0 ? "(" + avoidList.length + ")" : "";
+    avoidToggleBtn.textContent = arrow + " さける食材" + count;
+    avoidToggleBtn.setAttribute("aria-expanded", String(avoidSectionOpen));
+  }
+
+  function toggleAvoidSection() {
+    avoidSectionOpen = !avoidSectionOpen;
+    avoidToggleContent.classList.toggle("hidden", !avoidSectionOpen);
+    renderAvoidToggleLabel();
   }
 
   function addAvoidIngredient(raw) {
@@ -1409,11 +1443,11 @@
     }
   }
 
-  // 表示中の献立にaddした食材を使う料理がないか調べ、あれば確認バーを出す(キープ中の品は差し替え対象から除く)
-  function checkAvoidConflict(term) {
-    if (!currentMenu) return;
+  // 指定食材を使っている料理を探す(キープ中の品は差し替え対象から除いてkeptCountに数える)
+  function collectAvoidHits(term) {
     const hits = []; // 差し替え対象: { dayIndex, category }
     let keptCount = 0;
+    if (!currentMenu) return { hits: hits, keptCount: keptCount };
 
     currentMenu.days.forEach(day => {
       ["main", "side", "soup"].forEach(cat => {
@@ -1427,9 +1461,15 @@
         }
       });
     });
+    return { hits: hits, keptCount: keptCount };
+  }
 
-    if (hits.length === 0) return; // 差し替え対象がなければ確認バーは不要
-    showConfirmBar(term, hits, keptCount);
+  // 表示中の献立にaddした食材を使う料理がないか調べ、あれば確認バーを出す(さける食材の入力欄からの追加フロー用)
+  function checkAvoidConflict(term) {
+    if (!currentMenu) return;
+    const result = collectAvoidHits(term);
+    if (result.hits.length === 0) return; // 差し替え対象がなければ確認バーは不要
+    showConfirmBar(term, result.hits, result.keptCount);
   }
 
   function showConfirmBar(term, hits, keptCount) {
@@ -1445,18 +1485,31 @@
     avoidConfirmBar.classList.remove("hidden");
   }
 
+  // 買い物リストの長押しから呼ばれる確認バー: この時点ではまだavoidListに追加しない(「さしかえる」タップ時に追加)
+  function showShoppingAvoidConfirm(term, hits, keptCount) {
+    pendingAvoidConfirm = { term: term, hits: hits, needsAdd: true };
+    avoidConfirmText.textContent = "「" + term + "」を さける食材にして、つかっている料理を さしかえますか?";
+    if (hits.length === 0) {
+      avoidConfirmSubtext.textContent = "キープ中の りょうりでしか つかっていないため さしかえできません";
+      avoidConfirmSubtext.classList.remove("hidden");
+    } else if (keptCount > 0) {
+      avoidConfirmSubtext.textContent = "キープ中の" + keptCount + "品はそのまま";
+      avoidConfirmSubtext.classList.remove("hidden");
+    } else {
+      avoidConfirmSubtext.textContent = "";
+      avoidConfirmSubtext.classList.add("hidden");
+    }
+    avoidConfirmBar.classList.remove("hidden");
+  }
+
   function hideConfirmBar() {
     pendingAvoidConfirm = null;
     avoidConfirmBar.classList.add("hidden");
   }
 
-  // 確認バーの「さしかえる」: 対象の料理だけを差し替える。他の日・料理・チェック状態は一切変更しない
-  function performAvoidReplace() {
-    if (!pendingAvoidConfirm || !currentMenu) {
-      hideConfirmBar();
-      return;
-    }
-    const hits = pendingAvoidConfirm.hits;
+  // 差し替え対象(hits)の料理だけを新しく選び直す。他の日・料理・チェック状態は一切変更しない
+  function replaceDishesForHits(hits) {
+    if (!currentMenu || !hits || hits.length === 0) return;
     const keywords = parseIngredientKeywords();
     const historySet = getHistorySet();
     const opts = currentPickOpts();
@@ -1492,11 +1545,42 @@
       usedNames.add(newDish.name);
       day[cat] = newDish;
     });
+  }
+
+  // 確認バーの「さしかえる」: needsAdd(買い物リスト長押し由来)ならここで初めてavoidListへ追加してから差し替える
+  function performAvoidReplace() {
+    if (!pendingAvoidConfirm || !currentMenu) {
+      hideConfirmBar();
+      return;
+    }
+    const term = pendingAvoidConfirm.term;
+    const hits = pendingAvoidConfirm.hits;
+
+    if (pendingAvoidConfirm.needsAdd) {
+      const normNew = normalizeForSearch(term);
+      const exists = avoidList.some(t => normalizeForSearch(t) === normNew);
+      if (!exists) {
+        avoidList.push(term);
+        renderAvoidChips();
+      }
+    }
+
+    replaceDishesForHits(hits);
 
     // checkedSet(買い物リストのチェック状態)はリセットしない。あえてresetCheckedState()を呼ばない
     saveState();
     renderMenu();
     hideConfirmBar();
+  }
+
+  // ---------- 買い物リストの長押し(→さける食材にする確認) ----------
+
+  function handleShoppingLongPress(name) {
+    if (!currentMenu) return;
+    const normTerm = normalizeForSearch(name);
+    if (avoidList.some(t => normalizeForSearch(t) === normTerm)) return; // 既にさける食材なら何もしない
+    const result = collectAvoidHits(name);
+    showShoppingAvoidConfirm(name, result.hits, result.keptCount);
   }
 
   // ---------- 描画 ----------
@@ -1792,7 +1876,7 @@
       const key = "reg:" + name;
       const isChecked = !!checkedSet[key];
       return (
-        '<li class="' + (isChecked ? "checked" : "") + '" data-key="' + escapeHtml(key) + '">' +
+        '<li class="' + (isChecked ? "checked" : "") + '" data-key="' + escapeHtml(key) + '" data-name="' + escapeHtml(name) + '">' +
           '<span class="check-mark" aria-hidden="true"></span>' +
           '<span class="shop-text">' +
             '<span class="shop-name">' + escapeHtml(name) + "</span>" +
@@ -1816,8 +1900,86 @@
 
     document.querySelectorAll("#shopping-list li[data-key], #seasoning-list li[data-key]").forEach(li => {
       li.addEventListener("click", () => {
+        // 長押しが発火した直後、同じliへのclickはチェック消し込みを抑止する(タップと長押しの誤発火防止)
+        if (longPressFired && longPressFiredLi === li) {
+          longPressFired = false;
+          longPressFiredLi = null;
+          return;
+        }
         toggleChecked(li.getAttribute("data-key"));
       });
+    });
+
+    // 長押し(約600ms)で「さける食材」にする確認バーを出す。対象は買い物リストの食材項目のみ(調味料チェック枠は対象外)
+    document.querySelectorAll("#shopping-list li[data-name]").forEach(li => {
+      attachLongPress(li, li.getAttribute("data-name"));
+    });
+  }
+
+  // ---------- 長押し検出(ポインタイベント。pointerdown起点、600msでlongPressFiredを立てる) ----------
+
+  const LONG_PRESS_MS = 600;
+  const LONG_PRESS_MOVE_THRESHOLD = 10; // これ以上動いたらスクロール開始とみなしキャンセル
+  let longPressTimer = null;
+  let longPressFired = false; // trueの間、longPressFiredLiと同じliへの直後のclickを1回だけ抑止する
+  let longPressFiredLi = null; // 長押しが発火した対象li(抑止対象をこのliだけに限定する)
+  let longPressStartX = 0;
+  let longPressStartY = 0;
+  let longPressLi = null;
+
+  function clearLongPressTimer() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function cancelLongPress() {
+    clearLongPressTimer();
+    if (longPressLi) longPressLi.classList.remove("long-press-active");
+    longPressLi = null;
+  }
+
+  function attachLongPress(li, name) {
+    li.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      cancelLongPress();
+      longPressStartX = e.clientX;
+      longPressStartY = e.clientY;
+      longPressLi = li;
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        longPressFired = true;
+        longPressFiredLi = li;
+        li.classList.add("long-press-active"); // 長押し発火時の視覚フィードバック
+        setTimeout(() => li.classList.remove("long-press-active"), 220);
+        handleShoppingLongPress(name);
+        // 保険: 通常はこの直後のclickで消費されるが、何らかの理由でclickが来なくても
+        // フラグが残留して無関係な次のタップを誤って抑止し続けないようにする
+        setTimeout(() => {
+          if (longPressFiredLi === li) {
+            longPressFired = false;
+            longPressFiredLi = null;
+          }
+        }, 700);
+      }, LONG_PRESS_MS);
+    });
+    li.addEventListener("pointermove", (e) => {
+      if (!longPressTimer) return;
+      const dx = Math.abs(e.clientX - longPressStartX);
+      const dy = Math.abs(e.clientY - longPressStartY);
+      if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+        cancelLongPress(); // スクロール開始とみなしキャンセル
+      }
+    });
+    li.addEventListener("pointerup", () => {
+      clearLongPressTimer();
+    });
+    li.addEventListener("pointercancel", () => {
+      cancelLongPress();
+    });
+    li.addEventListener("pointerleave", () => {
+      clearLongPressTimer();
     });
   }
 
@@ -1928,7 +2090,7 @@
   function renderPokemonLoading() {
     pokeContent.innerHTML =
       '<div class="poke-loading-wrap">' +
-        '<div class="poke-ball-spinner"></div>' +
+        '<div class="poke-ball-spinner pokeball-face"></div>' +
         '<div class="poke-loading-text">あいぼうを よびだし中' +
           '<span class="poke-dots"><span>.</span><span>.</span><span>.</span></span>' +
         '</div>' +
@@ -2015,6 +2177,8 @@
 
   generateBtn.addEventListener("click", generateMenu);
   singleDayBtn.addEventListener("click", generateSingleDayMenu);
+
+  avoidToggleBtn.addEventListener("click", toggleAvoidSection);
 
   avoidAddBtn.addEventListener("click", () => addAvoidIngredient(avoidInput.value));
   avoidInput.addEventListener("keydown", (e) => {
