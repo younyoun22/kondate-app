@@ -223,6 +223,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    min-height: 72px;
   }
   .poke-sprite-wrap {
     width: 72px;
@@ -263,6 +264,56 @@
     font-size: 12px;
     color: var(--white);
     font-weight: 700;
+  }
+  .poke-loading-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .poke-ball-spinner {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid var(--carbon-navy);
+    background:
+      linear-gradient(to bottom,
+        var(--nintendo-red) 0%, var(--nintendo-red) 46%,
+        var(--carbon-navy) 46%, var(--carbon-navy) 54%,
+        var(--white) 54%, var(--white) 100%);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.3);
+    animation: pokeBallBounce 0.9s ease-in-out infinite;
+  }
+  .poke-ball-spinner::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--white);
+    border: 2px solid var(--carbon-navy);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  @keyframes pokeBallBounce {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-7px) rotate(-18deg); }
+    50% { transform: translateY(0) rotate(0deg); }
+    75% { transform: translateY(-3px) rotate(18deg); }
+  }
+  .poke-loading-text { font-size: 12px; color: var(--white); font-weight: 700; }
+  .poke-dots span {
+    display: inline-block;
+    opacity: 0.2;
+    animation: pokeDotBlink 1.2s infinite;
+  }
+  .poke-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .poke-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pokeDotBlink {
+    0%, 80%, 100% { opacity: 0.2; }
+    40% { opacity: 1; }
   }
 
   /* ===== 献立カード ===== */
@@ -913,12 +964,50 @@
       '</div>';
   }
 
+  const POKE_SPRITE_RAW_PREFIX = "https://raw.githubusercontent.com/PokeAPI/sprites/master/";
+  const POKE_SPRITE_MIRROR_PREFIX = "https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/";
+  const POKE_LOADING_MIN_MS = 800;
+
+  function renderPokemonLoading() {
+    pokeContent.innerHTML =
+      '<div class="poke-loading-wrap">' +
+        '<div class="poke-ball-spinner"></div>' +
+        '<div class="poke-loading-text">あいぼうを よびだし中' +
+          '<span class="poke-dots"><span>.</span><span>.</span><span>.</span></span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function preloadImage(url) {
+    return new Promise((resolve, reject) => {
+      const preload = new Image();
+      preload.onload = () => resolve(url);
+      preload.onerror = () => reject(new Error("sprite load failed: " + url));
+      preload.src = url;
+    });
+  }
+
+  // raw.githubusercontent.com がレート制限(429)で落ちやすいので、
+  // まずjsDelivrミラーで読み込み、だめならraw URLへフォールバックする
+  async function loadSpriteWithFallback(rawSprite) {
+    if (rawSprite.indexOf(POKE_SPRITE_RAW_PREFIX) === 0) {
+      const mirrorSprite = POKE_SPRITE_MIRROR_PREFIX + rawSprite.slice(POKE_SPRITE_RAW_PREFIX.length);
+      try {
+        return await preloadImage(mirrorSprite);
+      } catch (e) {
+        // ミラーがだめならrawで再挑戦(それも失敗したらcatch側でプレースホルダーへ)
+      }
+    }
+    return await preloadImage(rawSprite);
+  }
+
   async function fetchPokemon() {
-    pokeContent.innerHTML = '<div class="poke-loading">あいぼうを よびだし中...</div>';
+    renderPokemonLoading();
 
     const id = Math.floor(Math.random() * POKEMON_MAX_ID) + 1;
+    const minDelay = new Promise(resolve => setTimeout(resolve, POKE_LOADING_MIN_MS));
 
-    try {
+    const loadPokemon = (async () => {
       const [pokeRes, speciesRes] = await Promise.all([
         fetch("https://pokeapi.co/api/v2/pokemon/" + id),
         fetch("https://pokeapi.co/api/v2/pokemon-species/" + id)
@@ -933,29 +1022,34 @@
         || (speciesData.names || []).find(n => n.language && n.language.name === "ja");
       const name = jaNameEntry ? jaNameEntry.name : pokeData.name;
 
-      const sprite =
+      const rawSprite =
         (pokeData.sprites && pokeData.sprites.front_default) ||
         (pokeData.sprites && pokeData.sprites.other &&
           pokeData.sprites.other["official-artwork"] &&
           pokeData.sprites.other["official-artwork"].front_default);
 
-      if (!sprite) throw new Error("no sprite");
+      if (!rawSprite) throw new Error("no sprite");
 
       // 画像取得に失敗する場合(レート制限・ブロック等)もフォールバックさせる
-      await new Promise((resolve, reject) => {
-        const preload = new Image();
-        preload.onload = resolve;
-        preload.onerror = () => reject(new Error("sprite load failed"));
-        preload.src = sprite;
-      });
+      const sprite = await loadSpriteWithFallback(rawSprite);
 
+      return { name: name, sprite: sprite };
+    })();
+
+    // API・画像取得が一瞬で終わっても、呼び出しアニメを最低限見せる演出
+    const [settled] = await Promise.allSettled([loadPokemon]);
+    await minDelay;
+
+    if (settled.status === "fulfilled") {
+      const name = settled.value.name;
+      const sprite = settled.value.sprite;
       pokeContent.innerHTML =
         '<div class="poke-sprite-wrap"><img src="' + sprite + '" alt="' + escapeHtml(name) + '"></div>' +
         '<div class="poke-info">' +
           '<div class="poke-name">' + escapeHtml(name) + '</div>' +
           '<div class="poke-cheer">きょうの ばんごはん、おうえんしてるよ!</div>' +
         '</div>';
-    } catch (e) {
+    } else {
       renderPokemonPlaceholder();
     }
   }
