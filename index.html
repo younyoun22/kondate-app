@@ -721,6 +721,14 @@
 
       if (!sprite) throw new Error("no sprite");
 
+      // 画像取得に失敗する場合(レート制限・ブロック等)もフォールバックさせる
+      await new Promise((resolve, reject) => {
+        const preload = new Image();
+        preload.onload = resolve;
+        preload.onerror = () => reject(new Error("sprite load failed"));
+        preload.src = sprite;
+      });
+
       pokeContent.innerHTML =
         '<div class="poke-sprite-wrap"><img src="' + sprite + '" alt="' + escapeHtml(name) + '"></div>' +
         '<div class="poke-info">' +
