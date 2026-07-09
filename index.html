@@ -339,6 +339,12 @@
     display: block;
     margin-top: 3px;
   }
+  .dish-ingredients {
+    font-size: 10px;
+    color: #4a5578;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
   .dish-memo {
     font-size: 11px;
     color: #666;
@@ -371,6 +377,49 @@
     padding: 6px 8px;
     break-inside: avoid;
     color: var(--carbon-navy);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .shop-name {
+    font-weight: 700;
+  }
+  .shop-amount {
+    font-size: 11px;
+    color: #4a4a4a;
+  }
+
+  .seasoning-box {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 2px solid var(--platinum);
+  }
+  .seasoning-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: var(--carbon-navy);
+    margin-bottom: 8px;
+  }
+  .seasoning-list {
+    columns: 2;
+    column-gap: 12px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 11px;
+  }
+  .seasoning-list li {
+    background: #f4f6fb;
+    border: 1px dashed var(--periwinkle);
+    margin-bottom: 6px;
+    padding: 5px 8px;
+    break-inside: avoid;
+    color: var(--carbon-navy);
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   /* ===== フッター ===== */
@@ -443,6 +492,10 @@
   <div class="panel hidden" id="shopping-panel">
     <div class="panel-title">おかいもの リスト</div>
     <ul class="shopping-list" id="shopping-list"></ul>
+    <div class="seasoning-box">
+      <div class="seasoning-title">ちょうみりょう チェック(いえに あるか かくにん)</div>
+      <ul class="seasoning-list" id="seasoning-list"></ul>
+    </div>
   </div>
 
   <div class="footer">
@@ -458,8 +511,19 @@
   "use strict";
 
   const DAY_NAMES = ["月", "火", "水", "木", "金", "土", "日"];
-  const STORAGE_KEY = "kondate-app-last-menu";
+  const STORAGE_KEY = "kondate-app-last-menu-v2";
   const POKEMON_MAX_ID = 1025;
+
+  // 分量なしで「あるか確認する」だけの調味料・常備品まとめ枠に振り分ける食材名
+  const SEASONINGS = [
+    "しょうゆ", "みりん", "酒", "砂糖", "塩", "こしょう", "塩こしょう", "みそ", "味噌", "酢",
+    "ごま油", "サラダ油", "オリーブオイル", "バター", "マヨネーズ", "ケチャップ", "中濃ソース",
+    "オイスターソース", "めんつゆ", "ポン酢", "白だし", "だしの素", "顆粒和風だし",
+    "鶏ガラスープの素", "鶏がらスープの素", "コンソメ", "カレールー", "カレー粉",
+    "豆板醤", "甜麺醤", "片栗粉", "小麦粉", "パン粉", "すりごま", "いりごま", "ごま",
+    "はちみつ", "わさび", "からし", "七味唐辛子", "唐辛子", "ラー油",
+    "にんにく", "しょうが", "だし", "昆布だし", "昆布茶", "乾燥ハーブ", "お湯"
+  ];
 
   const ingredientInput = document.getElementById("ingredient-input");
   const weekendToggle = document.getElementById("weekend-toggle");
@@ -468,6 +532,7 @@
   const emptyHint = document.getElementById("empty-hint");
   const shoppingPanel = document.getElementById("shopping-panel");
   const shoppingList = document.getElementById("shopping-list");
+  const seasoningList = document.getElementById("seasoning-list");
   const pokeContent = document.getElementById("poke-content");
 
   let currentMenu = null; // { days: [{dayIndex, main, side, soup}], includeWeekend }
@@ -484,7 +549,7 @@
   }
 
   function containsIngredient(recipe, keyword) {
-    return recipe.ingredients.some(ing => ing.includes(keyword)) || recipe.name.includes(keyword);
+    return recipe.ingredients.some(ing => ing.n.includes(keyword)) || recipe.name.includes(keyword);
   }
 
   function parseIngredientKeywords() {
@@ -611,6 +676,10 @@
     return "https://www.google.com/search?q=" + query;
   }
 
+  function formatDishIngredients(dish) {
+    return dish.ingredients.map(ing => ing.n + " " + ing.a).join("・");
+  }
+
   function renderDish(dish) {
     return (
       '<div class="dish-row">' +
@@ -618,6 +687,7 @@
           '<span class="dish-cat-badge ' + categoryBadgeClass(dish.category) + '">' + categoryLabel(dish.category) + '</span>' +
           '<span class="genre-badge">' + dish.genre + '</span>' +
           '<span class="dish-name">' + escapeHtml(dish.name) + '</span>' +
+          '<div class="dish-ingredients">材料(2人分): ' + escapeHtml(formatDishIngredients(dish)) + '</div>' +
           '<div class="dish-memo">' + escapeHtml(dish.memo) + '</div>' +
         '</div>' +
         '<a class="recipe-link" href="' + buildRecipeSearchUrl(dish.name) + '" target="_blank" rel="noopener noreferrer">レシピを みる</a>' +
@@ -667,16 +737,147 @@
     renderShoppingList();
   }
 
+  // ---------- 分量の集計 ----------
+
+  const SIMPLE_UNITS = ["g", "kg", "ml", "個", "本", "枚", "束", "袋", "パック", "缶", "尾", "切れ", "株", "かけ", "丁"];
+
+  function gcd(a, b) {
+    a = Math.abs(a);
+    b = Math.abs(b);
+    while (b) {
+      const t = b;
+      b = a % b;
+      a = t;
+    }
+    return a || 1;
+  }
+
+  function parseFractionPart(numStr) {
+    if (numStr.indexOf("/") !== -1) {
+      const parts = numStr.split("/");
+      const n = Number(parts[0]);
+      const d = Number(parts[1]);
+      if (!isFinite(n) || !isFinite(d) || d === 0) return null;
+      return { num: n, den: d };
+    }
+    if (numStr.indexOf(".") !== -1) {
+      const decLen = numStr.split(".")[1].length;
+      const den = Math.pow(10, decLen);
+      const num = Math.round(parseFloat(numStr) * den);
+      if (!isFinite(num)) return null;
+      return { num: num, den: den };
+    }
+    const n = Number(numStr);
+    if (!isFinite(n)) return null;
+    return { num: n, den: 1 };
+  }
+
+  function addFrac(a, b) {
+    const den = a.den * b.den;
+    const num = a.num * b.den + b.num * a.den;
+    const g = gcd(num, den);
+    return { num: num / g, den: den / g };
+  }
+
+  function formatFrac(f) {
+    let num = f.num;
+    let den = f.den;
+    if (den < 0) { den = -den; num = -num; }
+    if (den === 1) return String(num);
+    const whole = Math.floor(num / den);
+    const rem = num - whole * den;
+    if (whole === 0) return rem + "/" + den;
+    if (rem === 0) return String(whole);
+    return whole + "と" + rem + "/" + den;
+  }
+
+  // 分量の文字列を解析。「数値+単位」「大さじ/小さじ+数値」ならkindを返し、
+  // 「1枚(約300g)」「少々」のようにパースできないものは raw として扱う
+  function parseAmount(amountStr) {
+    const s = (amountStr || "").trim();
+
+    let m = s.match(/^(大さじ|小さじ)(\d+(?:\.\d+)?(?:\/\d+)?)$/);
+    if (m) {
+      const frac = parseFractionPart(m[2]);
+      if (frac) return { kind: "prefix", prefix: m[1], frac: frac };
+    }
+
+    m = s.match(/^(\d+(?:\.\d+)?(?:\/\d+)?)([^\d]*)$/);
+    if (m && SIMPLE_UNITS.indexOf(m[2]) !== -1) {
+      const frac = parseFractionPart(m[1]);
+      if (frac) return { kind: "unit", unit: m[2], frac: frac };
+    }
+
+    return { kind: "raw", text: s };
+  }
+
+  // 同じ食材の分量リストを集計して表示用文字列を作る
+  // 同じ単位系はできる限り合算、パースできない/単位が異なるものは「+」で並記
+  function aggregateAmounts(amountList) {
+    const buckets = [];
+    const bucketIndex = new Map();
+
+    amountList.forEach(raw => {
+      const parsed = parseAmount(raw);
+      let key;
+      if (parsed.kind === "unit") key = "unit:" + parsed.unit;
+      else if (parsed.kind === "prefix") key = "prefix:" + parsed.prefix;
+      else key = "raw:" + parsed.text;
+
+      if (!bucketIndex.has(key)) {
+        const bucket = {
+          kind: parsed.kind,
+          unit: parsed.unit,
+          prefix: parsed.prefix,
+          text: parsed.text,
+          frac: parsed.kind !== "raw" ? parsed.frac : null
+        };
+        bucketIndex.set(key, bucket);
+        buckets.push(bucket);
+      } else if (parsed.kind !== "raw") {
+        const bucket = bucketIndex.get(key);
+        bucket.frac = addFrac(bucket.frac, parsed.frac);
+      }
+    });
+
+    return buckets.map(b => {
+      if (b.kind === "unit") return formatFrac(b.frac) + b.unit;
+      if (b.kind === "prefix") return b.prefix + formatFrac(b.frac);
+      return b.text;
+    }).join(" + ");
+  }
+
   function renderShoppingList() {
     if (!currentMenu) return;
-    const allIngredients = new Set();
+    const regularMap = new Map(); // 食材名 -> 分量文字列の配列
+    const seasoningSet = new Set();
+
     currentMenu.days.forEach(day => {
       [day.main, day.side, day.soup].forEach(dish => {
-        dish.ingredients.forEach(ing => allIngredients.add(ing));
+        dish.ingredients.forEach(ing => {
+          if (SEASONINGS.indexOf(ing.n) !== -1) {
+            seasoningSet.add(ing.n);
+          } else {
+            if (!regularMap.has(ing.n)) regularMap.set(ing.n, []);
+            regularMap.get(ing.n).push(ing.a);
+          }
+        });
       });
     });
-    const sorted = Array.from(allIngredients).sort((a, b) => a.localeCompare(b, "ja"));
-    shoppingList.innerHTML = sorted.map(ing => "<li>" + escapeHtml(ing) + "</li>").join("");
+
+    const regularNames = Array.from(regularMap.keys()).sort((a, b) => a.localeCompare(b, "ja"));
+    shoppingList.innerHTML = regularNames.map(name => {
+      const amountText = aggregateAmounts(regularMap.get(name));
+      return (
+        "<li>" +
+          '<span class="shop-name">' + escapeHtml(name) + "</span>" +
+          '<span class="shop-amount">' + escapeHtml(amountText) + "</span>" +
+        "</li>"
+      );
+    }).join("");
+
+    const seasoningNames = Array.from(seasoningSet).sort((a, b) => a.localeCompare(b, "ja"));
+    seasoningList.innerHTML = seasoningNames.map(name => "<li>" + escapeHtml(name) + "</li>").join("");
   }
 
   // ---------- localStorage ----------
