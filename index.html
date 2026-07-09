@@ -545,12 +545,21 @@
     word-break: break-word;
     cursor: pointer;
     -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+    /* iOS Safariが押下後にスクロール判定でポインタを横取りするのを防ぐ(縦スクロールは許可) */
+    touch-action: pan-y;
+    /* 長押し中じわっとオレンジへ変わる視覚フィードバック(押下時間=600msに合わせる) */
+    transition: background-color 0.6s ease;
   }
   .shopping-list li:active,
   .seasoning-list li:active {
     background: #cfd3d3;
+  }
+  .shopping-list li.long-press-charging {
+    background: var(--signal-orange);
   }
   .shopping-list li.long-press-active {
     background: var(--signal-orange);
@@ -1427,6 +1436,16 @@
     const exists = avoidList.some(t => normalizeForSearch(t) === normNew);
     if (exists) return;
 
+    // キープ中(日キープ・料理ピン)の料理でしか使っていない食材は登録しない。
+    // キープ=その料理を食べたい意思表示なので、その食材を今後避ける登録は不要(説明バーだけ出す)
+    if (currentMenu) {
+      const result = collectAvoidHits(term);
+      if (result.hits.length === 0 && result.keptCount > 0) {
+        showKeptOnlyInfoBar(term);
+        return;
+      }
+    }
+
     avoidList.push(term);
     saveState();
     renderAvoidChips();
@@ -1472,8 +1491,15 @@
     showConfirmBar(term, result.hits, result.keptCount);
   }
 
+  // 確認バーのボタンを通常の2択([さしかえる][そのまま])状態に戻す
+  function resetConfirmBarButtons() {
+    avoidConfirmReplaceBtn.classList.remove("hidden");
+    avoidConfirmKeepBtn.textContent = "そのまま";
+  }
+
   function showConfirmBar(term, hits, keptCount) {
     pendingAvoidConfirm = { term: term, hits: hits };
+    resetConfirmBarButtons();
     avoidConfirmText.textContent = hits.length + "品が「" + term + "」をつかっています。さしかえますか?";
     if (keptCount > 0) {
       avoidConfirmSubtext.textContent = "キープ中の" + keptCount + "品はそのまま";
@@ -1485,14 +1511,28 @@
     avoidConfirmBar.classList.remove("hidden");
   }
 
+  // キープ中の料理でしか使っていない食材向けの説明バー: avoidListには登録せず、[とじる]だけを出して何も変更しない
+  function showKeptOnlyInfoBar(term) {
+    pendingAvoidConfirm = null; // 実行できるアクションはないので確認待ち状態は持たない
+    avoidConfirmText.textContent = "「" + term + "」は キープ中の りょうりでしか つかっていないため、さける食材には しません";
+    avoidConfirmSubtext.textContent = "";
+    avoidConfirmSubtext.classList.add("hidden");
+    avoidConfirmReplaceBtn.classList.add("hidden");
+    avoidConfirmKeepBtn.textContent = "とじる";
+    avoidConfirmBar.classList.remove("hidden");
+  }
+
   // 買い物リストの長押しから呼ばれる確認バー: この時点ではまだavoidListに追加しない(「さしかえる」タップ時に追加)
   function showShoppingAvoidConfirm(term, hits, keptCount) {
+    // キープ中の料理でしか使っていない場合は登録せず説明だけ(キープ=食べたい意思表示のため)
+    if (hits.length === 0 && keptCount > 0) {
+      showKeptOnlyInfoBar(term);
+      return;
+    }
     pendingAvoidConfirm = { term: term, hits: hits, needsAdd: true };
+    resetConfirmBarButtons();
     avoidConfirmText.textContent = "「" + term + "」を さける食材にして、つかっている料理を さしかえますか?";
-    if (hits.length === 0) {
-      avoidConfirmSubtext.textContent = "キープ中の りょうりでしか つかっていないため さしかえできません";
-      avoidConfirmSubtext.classList.remove("hidden");
-    } else if (keptCount > 0) {
+    if (keptCount > 0) {
       avoidConfirmSubtext.textContent = "キープ中の" + keptCount + "品はそのまま";
       avoidConfirmSubtext.classList.remove("hidden");
     } else {
@@ -1505,6 +1545,7 @@
   function hideConfirmBar() {
     pendingAvoidConfirm = null;
     avoidConfirmBar.classList.add("hidden");
+    resetConfirmBarButtons();
   }
 
   // 差し替え対象(hits)の料理だけを新しく選び直す。他の日・料理・チェック状態は一切変更しない
@@ -1916,70 +1957,136 @@
     });
   }
 
-  // ---------- 長押し検出(ポインタイベント。pointerdown起点、600msでlongPressFiredを立てる) ----------
-
+  // ---------- 長押し検出(pointer系 + touch系の二重経路。iOS実機でのpointercancel早期発火に対応) ----------
+  //
+  // iOS Safariは要素にtouch-actionを明示しないとスクロール判定のためpointerを横取りし、
+  // 指が静止していてもpointercancelを送ってくることがある(CSS側でtouch-action:pan-yを付与済み)。
+  // それでもpointercancelが来た場合に備え、touchstart/touchmove/touchendベースの
+  // フォールバックタイマーを独立して走らせ、pointer経路とtouch経路のどちらか先に600ms到達した方を
+  // 採用する(fired フラグで二重発火を抑止)。
   const LONG_PRESS_MS = 600;
-  const LONG_PRESS_MOVE_THRESHOLD = 10; // これ以上動いたらスクロール開始とみなしキャンセル
-  let longPressTimer = null;
+  const LONG_PRESS_MOVE_THRESHOLD = 15; // タッチは指の面積があるため10pxだと厳しすぎる → 15pxに緩和
   let longPressFired = false; // trueの間、longPressFiredLiと同じliへの直後のclickを1回だけ抑止する
   let longPressFiredLi = null; // 長押しが発火した対象li(抑止対象をこのliだけに限定する)
-  let longPressStartX = 0;
-  let longPressStartY = 0;
-  let longPressLi = null;
-
-  function clearLongPressTimer() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  }
-
-  function cancelLongPress() {
-    clearLongPressTimer();
-    if (longPressLi) longPressLi.classList.remove("long-press-active");
-    longPressLi = null;
-  }
 
   function attachLongPress(li, name) {
+    let pointerTimer = null;
+    let touchTimer = null;
+    let startX = 0;
+    let startY = 0;
+    let pressing = false; // 押下中(視覚フィードバック表示中)か
+    let fired = false; // このプレス(押下〜離す)で既にどちらかの経路が発火済みか
+
+    // iOSではtouchstartがpointerdownを伴って発火する(Pointer Eventsがtouchの上に実装されている)ため、
+    // 同一の物理的な押下に対してpointer経路・touch経路の両方の開始ハンドラが呼ばれる。
+    // 片方が先に始めていたら、もう片方は「セッションの見た目(charging)」を初期化し直さず、
+    // 自分自身のタイマーだけを独立に追加する。これにより600ms後にどちらか片方のタイマーが
+    // 先に発火してもfire()の重複ガードで二重発火は起きず、pointer経路が途中でpointercancelに
+    // なってもtouch経路のタイマーは影響を受けずに生き続ける。
+    function startSessionIfNeeded(x, y) {
+      if (pressing) return;
+      startX = x;
+      startY = y;
+      fired = false;
+      pressing = true;
+      li.classList.add("long-press-charging"); // 押下中じわっとオレンジへ(CSS transition 0.6s)
+    }
+
+    function endSessionIfIdle() {
+      if (pointerTimer || touchTimer) return; // どちらかがまだ生きていれば継続
+      if (pressing) {
+        li.classList.remove("long-press-charging");
+        pressing = false;
+      }
+    }
+
+    function moveCancelCheck(x, y) {
+      if (!pressing || fired) return;
+      const dx = Math.abs(x - startX);
+      const dy = Math.abs(y - startY);
+      if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+        if (pointerTimer) { clearTimeout(pointerTimer); pointerTimer = null; }
+        if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+        li.classList.remove("long-press-charging");
+        pressing = false;
+      }
+    }
+
+    function fire() {
+      if (fired) return; // 既にもう一方の経路で発火済み(二重発火防止)
+      fired = true;
+      if (pointerTimer) { clearTimeout(pointerTimer); pointerTimer = null; }
+      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+      pressing = false;
+      li.classList.remove("long-press-charging");
+      longPressFired = true;
+      longPressFiredLi = li;
+      li.classList.add("long-press-active"); // 長押し発火時の視覚フィードバック(短いフラッシュ)
+      setTimeout(() => li.classList.remove("long-press-active"), 220);
+      handleShoppingLongPress(name);
+      // 保険: 通常はこの直後のclickで消費されるが、何らかの理由でclickが来なくても
+      // フラグが残留して無関係な次のタップを誤って抑止し続けないようにする
+      setTimeout(() => {
+        if (longPressFiredLi === li) {
+          longPressFired = false;
+          longPressFiredLi = null;
+        }
+      }, 700);
+    }
+
+    // ---- pointer経路 ----
     li.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      cancelLongPress();
-      longPressStartX = e.clientX;
-      longPressStartY = e.clientY;
-      longPressLi = li;
-      longPressTimer = setTimeout(() => {
-        longPressTimer = null;
-        longPressFired = true;
-        longPressFiredLi = li;
-        li.classList.add("long-press-active"); // 長押し発火時の視覚フィードバック
-        setTimeout(() => li.classList.remove("long-press-active"), 220);
-        handleShoppingLongPress(name);
-        // 保険: 通常はこの直後のclickで消費されるが、何らかの理由でclickが来なくても
-        // フラグが残留して無関係な次のタップを誤って抑止し続けないようにする
-        setTimeout(() => {
-          if (longPressFiredLi === li) {
-            longPressFired = false;
-            longPressFiredLi = null;
-          }
-        }, 700);
-      }, LONG_PRESS_MS);
+      startSessionIfNeeded(e.clientX, e.clientY);
+      if (pointerTimer) clearTimeout(pointerTimer);
+      pointerTimer = setTimeout(fire, LONG_PRESS_MS);
     });
     li.addEventListener("pointermove", (e) => {
-      if (!longPressTimer) return;
-      const dx = Math.abs(e.clientX - longPressStartX);
-      const dy = Math.abs(e.clientY - longPressStartY);
-      if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
-        cancelLongPress(); // スクロール開始とみなしキャンセル
-      }
+      moveCancelCheck(e.clientX, e.clientY);
     });
     li.addEventListener("pointerup", () => {
-      clearLongPressTimer();
+      if (pointerTimer) { clearTimeout(pointerTimer); pointerTimer = null; }
+      endSessionIfIdle();
     });
     li.addEventListener("pointercancel", () => {
-      cancelLongPress();
+      // iOSがスクロール判定でポインタを横取りした場合。touch経路のフォールバックが生きていれば継続させる
+      if (pointerTimer) { clearTimeout(pointerTimer); pointerTimer = null; }
+      endSessionIfIdle();
     });
     li.addEventListener("pointerleave", () => {
-      clearLongPressTimer();
+      if (pointerTimer) { clearTimeout(pointerTimer); pointerTimer = null; }
+      endSessionIfIdle();
+    });
+
+    // ---- touch経路(フォールバック。pointer経路が横取りされても独立して600ms計測を続ける) ----
+    li.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      if (!t) return;
+      startSessionIfNeeded(t.clientX, t.clientY);
+      if (touchTimer) clearTimeout(touchTimer);
+      touchTimer = setTimeout(fire, LONG_PRESS_MS);
+    }, { passive: true });
+    li.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      if (!t) return;
+      moveCancelCheck(t.clientX, t.clientY);
+    }, { passive: true });
+    li.addEventListener("touchend", (e) => {
+      if (fired) {
+        // 長押し発火済みのtouchendから合成されるclickでチェックが誤ってトグルされないよう抑止
+        e.preventDefault();
+      }
+      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+      endSessionIfIdle();
+    });
+    li.addEventListener("touchcancel", () => {
+      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+      endSessionIfIdle();
+    });
+
+    // 長押し・テキスト選択の副作用として出る文脈メニューを抑止(リスト項目上のみ)
+    li.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
     });
   }
 
