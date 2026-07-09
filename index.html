@@ -451,10 +451,57 @@
     padding: 6px 8px;
     border: 1px solid var(--chrome-indigo);
     flex-shrink: 0;
+    text-align: center;
   }
   .recipe-link:active { background: var(--platinum); }
 
+  .dish-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .dish-keep-btn {
+    background: var(--platinum);
+    color: var(--carbon-navy);
+    border: none;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 5px 8px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .dish-keep-btn:active { transform: translateY(1px); }
+  .dish-keep-btn.is-active {
+    background: var(--nintendo-red);
+    box-shadow: inset 0 0 0 2px var(--carbon-navy);
+  }
+
   /* ===== 買い物リスト ===== */
+  .shopping-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .shopping-tab {
+    background: var(--platinum);
+    color: var(--carbon-navy);
+    border: none;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  .shopping-tab:active { transform: translateY(1px); }
+  .shopping-tab.is-active {
+    background: var(--nintendo-red);
+    color: var(--white);
+    box-shadow: inset 0 0 0 2px var(--carbon-navy);
+  }
   .shopping-list {
     columns: 2;
     column-gap: 12px;
@@ -635,6 +682,12 @@
 
   <div class="panel hidden" id="shopping-panel">
     <div class="panel-title">おかいもの リスト</div>
+    <div class="shopping-tabs" id="shopping-tabs">
+      <button class="shopping-tab is-active" data-cat="all">ぜんぶ</button>
+      <button class="shopping-tab" data-cat="main">しゅさい</button>
+      <button class="shopping-tab" data-cat="side">ふくさい</button>
+      <button class="shopping-tab" data-cat="soup">しるもの</button>
+    </div>
     <ul class="shopping-list" id="shopping-list"></ul>
     <div class="seasoning-box">
       <div class="seasoning-title">ちょうみりょう チェック(いえに あるか かくにん)</div>
@@ -655,7 +708,7 @@
   "use strict";
 
   const WEEKDAY_KANJI = ["日", "月", "火", "水", "木", "金", "土"]; // Date#getDay() 準拠(0=日)
-  const STORAGE_KEY = "kondate-app-state-v3";
+  const STORAGE_KEY = "kondate-app-state-v4";
   const HISTORY_KEY = "kondate-app-history-v3";
   const HISTORY_MAX_GENERATIONS = 2;
   const POKEMON_MAX_ID = 1025;
@@ -682,9 +735,10 @@
   const pokeContent = document.getElementById("poke-content");
   const singleDayBtn = document.getElementById("single-day-btn");
 
-  // currentMenu: { days: [{dayIndex, keep, main, side, soup}], includeWeekend, weekStart(ISO), isSingleDay }
+  // currentMenu: { days: [{dayIndex, keep, keeps:{main,side,soup}, main, side, soup}], includeWeekend, weekStart(ISO), isSingleDay }
   let currentMenu = null;
   let checkedSet = {}; // 買い物リストのチェック状態 "reg:食材名" / "sea:食材名" -> true
+  let shoppingCategoryFilter = "all"; // 買い物リストのカテゴリ絞り込み: "all" / "main" / "side" / "soup"
 
   // ---------- ユーティリティ ----------
 
@@ -697,8 +751,74 @@
     return a;
   }
 
+  // ---------- 表記ゆれ対応(正規化 + 漢字エイリアス辞書) ----------
+
+  // ひらがなをカタカナへ変換(Unicode上でひらがなの直後0x60にカタカナが並ぶことを利用)
+  function hiraganaToKatakana(str) {
+    return str.replace(/[ぁ-ゖ]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+  }
+
+  // 「にら/ニラ/韮」のような表記ゆれを吸収するための漢字・別表記エイリアス辞書。
+  // recipes.jsのデータそのものは変更せず、比較の直前に両側をこの辞書で正規化して揃える。
+  // キー: 入力されうる漢字・別表記 / 値: 正規化後のカタカナ表記
+  const ALIASES = {
+    // --- recipes.js内で漢字表記されている食材名を仮名化するためのエイリアス ---
+    "大根": "ダイコン", "大葉": "オオバ", "長": "ナガ", "芋": "イモ",
+    "野菜": "ヤサイ", "厚": "アツ", "揚げ": "アゲ", "油": "アブラ",
+    "肉": "ニク", "粉チーズ": "コナチーズ", "粉": "コ", "片栗": "カタクリ",
+    "豆板醤": "トウバンジャン", "豆": "トウ", "腐": "フ", "乳": "ニュウ",
+    "木綿": "モメン", "豚": "ブタ", "牛": "ギュウ", "鶏": "トリ",
+    "こま切れ": "コマギレ", "薄切り": "ウスギリ", "ひき": "ヒキ",
+    "白菜": "ハクサイ", "水菜": "ミズナ", "小松菜": "コマツナ", "チンゲン菜": "チンゲンサイ",
+    "小麦": "コムギ", "砂糖": "サトウ", "味噌": "ミソ", "梅干し": "ウメボシ",
+    "白身魚": "シロミザカナ", "白": "シロ", "酒": "サケ", "鮭": "サケ",
+    "生": "ナマ", "冬瓜": "トウガン", "唐辛子": "トウガラシ", "枝豆": "エダマメ",
+    "手羽先": "テバサキ", "春雨": "ハルサメ", "切り干し": "キリボシ",
+    "昆布": "コンブ", "茶": "チャ", "汁": "ジル", "塩": "シオ",
+    "乾燥": "カンソウ", "缶": "カン", "酢": "ス", "黒": "クロ",
+    "素": "モト", "鯖": "サバ", "卵": "タマゴ",
+
+    // --- ユーザーが打ちそうな一般的な漢字・別表記(recipes.jsの表記へ寄せる) ---
+    "韮": "ニラ", "茄子": "ナス", "人参": "ニンジン",
+    "玉葱": "タマネギ", "玉ねぎ": "タマネギ", "葱": "ネギ",
+    "胡瓜": "キュウリ", "南瓜": "カボチャ", "牛蒡": "ゴボウ",
+    "蓮根": "レンコン", "椎茸": "シイタケ", "玉子": "タマゴ",
+    "生姜": "ショウガ", "醤油": "ショウユ", "出汁": "ダシ",
+    "筍": "タケノコ", "鱈": "タラ", "鰤": "ブリ", "大蒜": "ニンニク",
+    "茗荷": "ミョウガ", "白滝": "シラタキ", "若布": "ワカメ", "和布": "ワカメ",
+    "鯵": "アジ", "鰯": "イワシ", "海老": "エビ", "蝦": "エビ",
+    "蕪": "カブ", "胡麻": "ゴマ", "胡椒": "コショウ", "秋刀魚": "サンマ",
+    "蜆": "シジミ", "苦瓜": "ゴーヤ", "木耳": "キクラゲ", "味醂": "ミリン",
+    "鶏肉": "トリニク", "豚肉": "ブタニク", "牛肉": "ギュウニク"
+  };
+
+  // 長いキーから順に置換する(「豆板醤」等の熟語を「豆」等の単漢字より先に変換するため)
+  const ALIAS_KEYS = Object.keys(ALIASES).sort((a, b) => b.length - a.length);
+
+  function applyAliases(str) {
+    let result = str;
+    for (let i = 0; i < ALIAS_KEYS.length; i++) {
+      const key = ALIAS_KEYS[i];
+      if (result.indexOf(key) !== -1) {
+        result = result.split(key).join(ALIASES[key]);
+      }
+    }
+    return result;
+  }
+
+  // 検索比較用の正規化: NFKC → 漢字エイリアス変換 → 残りのひらがなをカタカナへ統一
+  function normalizeForSearch(str) {
+    if (!str) return "";
+    const nfkc = String(str).normalize("NFKC");
+    const aliased = applyAliases(nfkc);
+    return hiraganaToKatakana(aliased);
+  }
+
   function containsIngredient(recipe, keyword) {
-    return recipe.ingredients.some(ing => ing.n.includes(keyword)) || recipe.name.includes(keyword);
+    const normKeyword = normalizeForSearch(keyword);
+    if (!normKeyword) return false;
+    if (normalizeForSearch(recipe.name).indexOf(normKeyword) !== -1) return true;
+    return recipe.ingredients.some(ing => normalizeForSearch(ing.n).indexOf(normKeyword) !== -1);
   }
 
   function parseIngredientKeywords() {
@@ -794,16 +914,18 @@
 
   // ---------- 献立生成ロジック ----------
 
-  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet) {
+  // presetDishes: { main?, side?, soup? } を渡すと、そのカテゴリは抽選せずそのまま採用する(料理単位キープ用)
+  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, presetDishes) {
+    const preset = presetDishes || {};
     const mains = getRecipesByCategory("main");
     const sides = getRecipesByCategory("side");
     const soups = getRecipesByCategory("soup");
 
-    const main = pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet);
+    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet);
     usedNames.add(main.name);
-    const side = pickBest(sides, [], [], keywords, false, usedNames, historySet);
+    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet);
     usedNames.add(side.name);
-    const soup = pickBest(soups, [], [], keywords, false, usedNames, historySet);
+    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet);
     usedNames.add(soup.name);
 
     return { main, side, soup };
@@ -856,9 +978,26 @@
     const oldDays = (currentMenu && !currentMenu.isSingleDay) ? currentMenu.days : [];
     const keptDays = oldDays.filter(d => d.keep && d.dayIndex < numDays);
 
+    // 日キープではないが、料理単位でキープされている品がある日は、その品だけ引き継ぐ
+    const partialKeepMap = new Map(); // dayIndex -> { preset: {main?,side?,soup?}, keeps }
+    oldDays.forEach(d => {
+      if (d.keep || d.dayIndex >= numDays) return;
+      const keeps = Object.assign({ main: false, side: false, soup: false }, d.keeps);
+      const preset = {};
+      if (keeps.main) preset.main = d.main;
+      if (keeps.side) preset.side = d.side;
+      if (keeps.soup) preset.soup = d.soup;
+      if (preset.main || preset.side || preset.soup) {
+        partialKeepMap.set(d.dayIndex, { preset, keeps });
+      }
+    });
+
     const usedNames = new Set();
     keptDays.forEach(d => {
       [d.main, d.side, d.soup].forEach(dish => usedNames.add(dish.name));
+    });
+    partialKeepMap.forEach(info => {
+      Object.keys(info.preset).forEach(cat => usedNames.add(info.preset[cat].name));
     });
 
     const historySet = getHistorySet();
@@ -873,8 +1012,10 @@
       if (kept) {
         day = kept;
       } else {
-        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet);
-        day = { dayIndex: i, keep: false, ...dishes };
+        const partial = partialKeepMap.get(i);
+        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet, partial ? partial.preset : null);
+        const keeps = partial ? partial.keeps : { main: false, side: false, soup: false };
+        day = { dayIndex: i, keep: false, keeps: keeps, ...dishes };
       }
       days.push(day);
 
@@ -902,7 +1043,7 @@
     const usedNames = new Set();
 
     const dishes = pickDayDishes([], [], keywords, usedNames, historySet);
-    const day = { dayIndex: 0, keep: false, ...dishes };
+    const day = { dayIndex: 0, keep: false, keeps: { main: false, side: false, soup: false }, ...dishes };
 
     currentMenu = { days: [day], includeWeekend: false, weekStart: todayISO, isSingleDay: true };
     resetCheckedState();
@@ -914,7 +1055,7 @@
   function rerollDay(dayIndex) {
     if (!currentMenu) return;
     const day = currentMenu.days.find(d => d.dayIndex === dayIndex);
-    if (!day || day.keep) return; // キープ中は引き直し不可
+    if (!day || day.keep) return; // 日キープ中は引き直し不可
 
     const keywords = parseIngredientKeywords();
     const prevDay = currentMenu.days.find(d => d.dayIndex === dayIndex - 1);
@@ -929,10 +1070,17 @@
     });
     [day.main, day.side, day.soup].forEach(dish => usedNames.add(dish.name));
 
+    // 料理単位でキープされている品はそのまま残し、それ以外だけ引き直す
+    const keeps = Object.assign({ main: false, side: false, soup: false }, day.keeps);
+    const preset = {};
+    if (keeps.main) preset.main = day.main;
+    if (keeps.side) preset.side = day.side;
+    if (keeps.soup) preset.soup = day.soup;
+
     const historySet = getHistorySet();
-    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet);
+    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, preset);
     const idx = currentMenu.days.indexOf(day);
-    currentMenu.days[idx] = { dayIndex, keep: false, ...dishes };
+    currentMenu.days[idx] = { dayIndex, keep: false, keeps: keeps, main: dishes.main, side: dishes.side, soup: dishes.soup };
     resetCheckedState();
     saveState();
     renderMenu();
@@ -943,6 +1091,17 @@
     const day = currentMenu.days.find(d => d.dayIndex === dayIndex);
     if (!day) return;
     day.keep = !day.keep;
+    saveState();
+    renderMenu();
+  }
+
+  // 料理単位(しゅさい/ふくさい/しるもの)のキープ切り替え。日キープ中は無効
+  function toggleDishKeep(dayIndex, category) {
+    if (!currentMenu) return;
+    const day = currentMenu.days.find(d => d.dayIndex === dayIndex);
+    if (!day || day.keep) return;
+    if (!day.keeps) day.keeps = { main: false, side: false, soup: false };
+    day.keeps[category] = !day.keeps[category];
     saveState();
     renderMenu();
   }
@@ -986,7 +1145,13 @@
     return dish.ingredients.map(ing => ing.n + " " + ing.a).join("・");
   }
 
-  function renderDish(dish) {
+  function renderDish(dish, dayIndex, dayKept, dishKept) {
+    const keepBtnHtml = dayKept ? "" : (
+      '<button class="dish-keep-btn' + (dishKept ? ' is-active' : '') + '" data-day="' + dayIndex + '" data-cat="' + dish.category + '" aria-label="' +
+        (dishKept ? 'この料理のキープを解除' : 'この料理をキープ') + '">' +
+        (dishKept ? '🔒' : '📌') +
+      '</button>'
+    );
     return (
       '<div class="dish-row">' +
         '<div class="dish-info">' +
@@ -996,7 +1161,10 @@
           '<div class="dish-ingredients">材料(2人分): ' + escapeHtml(formatDishIngredients(dish)) + '</div>' +
           '<div class="dish-memo">' + escapeHtml(dish.memo) + '</div>' +
         '</div>' +
-        '<a class="recipe-link" href="' + buildRecipeSearchUrl(dish.name) + '" target="_blank" rel="noopener noreferrer">レシピを みる</a>' +
+        '<div class="dish-actions">' +
+          keepBtnHtml +
+          '<a class="recipe-link" href="' + buildRecipeSearchUrl(dish.name) + '" target="_blank" rel="noopener noreferrer">レシピを みる</a>' +
+        '</div>' +
       '</div>'
     );
   }
@@ -1032,9 +1200,9 @@
               '<button class="reroll-btn" data-day="' + day.dayIndex + '"' + (kept ? ' disabled' : '') + '>ひきなおす</button>' +
             '</div>' +
           '</div>' +
-          renderDish(day.main) +
-          renderDish(day.side) +
-          renderDish(day.soup) +
+          renderDish(day.main, day.dayIndex, kept, !!(day.keeps && day.keeps.main)) +
+          renderDish(day.side, day.dayIndex, kept, !!(day.keeps && day.keeps.side)) +
+          renderDish(day.soup, day.dayIndex, kept, !!(day.keeps && day.keeps.soup)) +
         '</div>'
       );
     }).join("");
@@ -1050,6 +1218,14 @@
       btn.addEventListener("click", () => {
         const idx = parseInt(btn.getAttribute("data-day"), 10);
         toggleKeep(idx);
+      });
+    });
+
+    document.querySelectorAll(".dish-keep-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-day"), 10);
+        const cat = btn.getAttribute("data-cat");
+        toggleDishKeep(idx, cat);
       });
     });
 
@@ -1171,8 +1347,11 @@
     const regularMap = new Map(); // 食材名 -> 分量文字列の配列
     const seasoningSet = new Set();
 
+    const filterCat = shoppingCategoryFilter;
     currentMenu.days.forEach(day => {
-      [day.main, day.side, day.soup].forEach(dish => {
+      const dishList = filterCat === "all" ? [day.main, day.side, day.soup] : [day[filterCat]];
+      dishList.forEach(dish => {
+        if (!dish) return;
         dish.ingredients.forEach(ing => {
           if (SEASONINGS.indexOf(ing.n) !== -1) {
             seasoningSet.add(ing.n);
@@ -1248,12 +1427,61 @@
 
   // ---------- PokeAPI ----------
 
+  // あいぼうの応援コメント(ランダム表示用)
+  const POKE_CHEERS = [
+    "きょうの ばんごはん、おうえんしてるよ!",
+    "きょうの おかず、きっと おいしいよ!",
+    "いっしょに ばんごはんを たべたいな!",
+    "おなかが すいてきたね、はやく つくろう!",
+    "きょうも げんきに クッキングだ!",
+    "かいものも ぼうけんだ!",
+    "しょくざいたちが きみを まってるよ!",
+    "ばんごはんの じかんが たのしみだね!",
+    "おいしい ごはんで もりもり げんきに!",
+    "きょうの こんだて、なかなか やるね!",
+    "ぼくも おてつだい したいな!",
+    "たべすぎ ちゅういだよ、でも たのしんでね!",
+    "しょくたくが にぎやかに なりそうだ!",
+    "きょうの りょうりも バッチリだね!",
+    "おいしそうな においが してきたよ!",
+    "つかれたら すこし きゅうけい しよう!",
+    "ふたりの ばんごはん、おうえんするよ!",
+    "きょうも ごはん がんばったね、えらい!",
+    "おかいものリスト、ばっちり チェックしよう!",
+    "しんせんな しょくざいで げんきに なろう!",
+    "きょうの メニュー、みるだけで おなかすくね!",
+    "ぼくと いっしょに れしぴを えらぼう!",
+    "あじみも わすれずにね!",
+    "きょうの しゅさいは なにかな、たのしみ!",
+    "ふくさいも しっかり たべようね!",
+    "しるものが あると ほっと するよね!",
+    "キッチンでの ぼうけん、はじまるよ!",
+    "おいしい ばんごはんで えがおに なろう!",
+    "きょうも いちにち おつかれさま!",
+    "つぎは なにを つくろうか、わくわく!",
+    "げんきいっぱい ばんごはんタイム!",
+    "きみの りょうりの うで、みせてね!"
+  ];
+
+  // モンスターボール(未取得)状態の応援コメント
+  const POKE_PLACEHOLDER_CHEERS = [
+    "きょうも げんきに いってきます!",
+    "こんだてを つくると あいぼうが あらわれるよ!",
+    "モンスターボールの なかで まってるよ!",
+    "ボタンを おして あいぼうを よびだそう!",
+    "どんな あいぼうが でてくるかな?"
+  ];
+
+  function randomFrom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
   function renderPokemonPlaceholder() {
     pokeContent.innerHTML =
       '<div class="poke-sprite-wrap">⚪</div>' +
       '<div class="poke-info">' +
         '<div class="poke-name">モンスターボール</div>' +
-        '<div class="poke-cheer">きょうも げんきに いってきます!</div>' +
+        '<div class="poke-cheer">' + escapeHtml(randomFrom(POKE_PLACEHOLDER_CHEERS)) + '</div>' +
       '</div>';
   }
 
@@ -1340,7 +1568,7 @@
         '<div class="poke-sprite-wrap"><img src="' + sprite + '" alt="' + escapeHtml(name) + '"></div>' +
         '<div class="poke-info">' +
           '<div class="poke-name">' + escapeHtml(name) + '</div>' +
-          '<div class="poke-cheer">きょうの ばんごはん、おうえんしてるよ!</div>' +
+          '<div class="poke-cheer">' + escapeHtml(randomFrom(POKE_CHEERS)) + '</div>' +
         '</div>';
     } else {
       renderPokemonPlaceholder();
@@ -1351,6 +1579,14 @@
 
   generateBtn.addEventListener("click", generateMenu);
   singleDayBtn.addEventListener("click", generateSingleDayMenu);
+
+  document.querySelectorAll(".shopping-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      shoppingCategoryFilter = btn.getAttribute("data-cat");
+      document.querySelectorAll(".shopping-tab").forEach(b => b.classList.toggle("is-active", b === btn));
+      renderShoppingList();
+    });
+  });
 
   const saved = loadState();
   if (saved) {
