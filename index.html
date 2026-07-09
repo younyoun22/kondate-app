@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NINTENDO風 こんだて計画</title>
+<meta name="theme-color" content="#21242e">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="こんだて">
+<meta property="og:title" content="NINTENDO風 こんだて計画">
+<meta property="og:description" content="夫婦ふたりの夜ごはん、1週間分をワンタップで提案">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://younyoun22.github.io/kondate-app/">
+<meta property="og:image" content="https://younyoun22.github.io/kondate-app/icon-512.png">
+<meta name="twitter:card" content="summary">
 <style>
   :root {
     --nintendo-red: #e60012;
@@ -1353,6 +1366,18 @@
   }
 
 })();
+</script>
+<script>
+  // PWA: Service Worker登録(secure context以外や未対応ブラウザでは何もしない)
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", () => {
+      try {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      } catch (e) {
+        // 登録に失敗してもアプリ自体は通常どおり動作させる
+      }
+    });
+  }
 </script>
 </body>
 </html>
