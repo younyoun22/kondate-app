@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NINTENDO風 こんだて計画</title>
+<style>
+  :root {
+    --nintendo-red: #e60012;
+    --signal-orange: #f68d1f;
+    --amber: #ecab37;
+    --nav-gold: #e48600;
+    --periwinkle: #7a8aba;
+    --canvas-soft: #9fbee7;
+    --chrome-indigo: #3d4f97;
+    --platinum: #dedede;
+    --white: #ffffff;
+    --carbon-navy: #21242e;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--carbon-navy);
+    font-family: Arial, "Helvetica Neue", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app {
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--periwinkle);
+    min-height: 100vh;
+    position: relative;
+  }
+
+  /* ===== マストヘッド ===== */
+  .masthead {
+    background: var(--carbon-navy);
+    background-image: repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.03) 0px,
+      rgba(255,255,255,0.03) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid var(--chrome-indigo);
+  }
+  .logo-ball {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  }
+  .logo-ball::after {
+    content: "";
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--nintendo-red);
+  }
+  .masthead-title {
+    color: var(--white);
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* ===== ナビバー ===== */
+  .navbar {
+    background: linear-gradient(180deg, #2a2e3a 0%, var(--carbon-navy) 100%);
+    padding: 6px 16px;
+    display: flex;
+    gap: 14px;
+    border-bottom: 1px solid var(--chrome-indigo);
+  }
+  .navbar span {
+    color: var(--nav-gold);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* ===== ヒーロー ===== */
+  .hero {
+    background: linear-gradient(160deg, var(--nintendo-red) 0%, #b8000e 100%);
+    padding: 22px 16px 20px;
+    text-align: center;
+    border-bottom: 3px solid var(--chrome-indigo);
+  }
+  .hero h1 {
+    margin: 0;
+    color: var(--white);
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    text-shadow:
+      2px 2px 0 var(--carbon-navy),
+      -1px -1px 0 var(--carbon-navy),
+      1px -1px 0 var(--carbon-navy),
+      -1px 1px 0 var(--carbon-navy);
+    line-height: 1.3;
+  }
+  .hero p {
+    margin: 6px 0 0;
+    color: var(--amber);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== パネル共通(ベベル金属板) ===== */
+  .panel {
+    background: var(--white);
+    margin: 16px;
+    padding: 14px;
+    border-top: 2px solid rgba(255,255,255,0.9);
+    border-bottom: 3px solid var(--chrome-indigo);
+    border-left: 1px solid var(--chrome-indigo);
+    border-right: 1px solid var(--chrome-indigo);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+  }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--carbon-navy);
+    margin: 0 0 10px 0;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--platinum);
+  }
+
+  /* ===== 操作パネル ===== */
+  .field {
+    margin-bottom: 12px;
+  }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--carbon-navy);
+    margin-bottom: 4px;
+  }
+  .field input[type="text"] {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    border: 2px solid var(--periwinkle);
+    background: #f4f6fb;
+    font-family: inherit;
+  }
+  .field input[type="text"]:focus {
+    outline: 2px solid var(--signal-orange);
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .toggle-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+  .toggle-row label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--carbon-navy);
+  }
+
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    color: var(--white);
+    text-transform: uppercase;
+  }
+  .btn-primary {
+    background: linear-gradient(180deg, #ff9d3d 0%, var(--signal-orange) 100%);
+    border-top: 2px solid rgba(255,255,255,0.6);
+    border-bottom: 3px solid #b85f00;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+  }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-secondary {
+    background: linear-gradient(180deg, #f0bd5e 0%, var(--amber) 100%);
+    border-top: 2px solid rgba(255,255,255,0.6);
+    border-bottom: 3px solid #a97a1a;
+    color: var(--carbon-navy);
+    font-size: 11px;
+    padding: 8px;
+    min-height: 36px;
+  }
+  .btn-secondary:active { transform: translateY(1px); }
+
+  /* ===== ポケモンパネル ===== */
+  .poke-panel {
+    background: linear-gradient(180deg, var(--canvas-soft) 0%, var(--periwinkle) 100%);
+  }
+  .poke-panel .panel-title { color: var(--white); border-bottom-color: rgba(255,255,255,0.4); }
+  .poke-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .poke-sprite-wrap {
+    width: 72px;
+    height: 72px;
+    background: var(--white);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid var(--chrome-indigo);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    overflow: hidden;
+  }
+  .poke-sprite-wrap img {
+    width: 64px;
+    height: 64px;
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+  .poke-info { flex: 1; min-width: 0; }
+  .poke-name {
+    font-weight: 900;
+    font-size: 15px;
+    color: var(--white);
+    text-shadow: 1px 1px 0 var(--carbon-navy);
+    margin-bottom: 4px;
+  }
+  .poke-cheer {
+    font-size: 11px;
+    color: var(--carbon-navy);
+    background: rgba(255,255,255,0.85);
+    padding: 4px 8px;
+    display: inline-block;
+    border-radius: 2px;
+  }
+  .poke-loading {
+    font-size: 12px;
+    color: var(--white);
+    font-weight: 700;
+  }
+
+  /* ===== 献立カード ===== */
+  .day-card {
+    background: var(--white);
+    margin: 0 16px 16px;
+    border-top: 2px solid rgba(255,255,255,0.9);
+    border-bottom: 3px solid var(--chrome-indigo);
+    border-left: 1px solid var(--chrome-indigo);
+    border-right: 1px solid var(--chrome-indigo);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+  }
+  .day-card-header {
+    background: var(--carbon-navy);
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .day-card-header .day-label {
+    color: var(--nav-gold);
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+  }
+  .reroll-btn {
+    background: var(--amber);
+    color: var(--carbon-navy);
+    border: none;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 6px 10px;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+  }
+  .reroll-btn:active { transform: translateY(1px); }
+
+  .dish-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--platinum);
+  }
+  .dish-row:last-child { border-bottom: none; }
+  .dish-info { flex: 1; min-width: 0; }
+  .dish-cat-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    margin-right: 6px;
+    color: var(--white);
+  }
+  .badge-main { background: var(--nintendo-red); }
+  .badge-side { background: var(--chrome-indigo); }
+  .badge-soup { background: #5a7a3d; }
+  .genre-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    margin-right: 6px;
+    background: var(--amber);
+    color: var(--carbon-navy);
+  }
+  .dish-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--carbon-navy);
+    display: block;
+    margin-top: 3px;
+  }
+  .dish-memo {
+    font-size: 11px;
+    color: #666;
+    margin-top: 2px;
+  }
+  .recipe-link {
+    font-size: 10px;
+    color: var(--chrome-indigo);
+    text-decoration: none;
+    font-weight: 700;
+    white-space: nowrap;
+    padding: 6px 8px;
+    border: 1px solid var(--chrome-indigo);
+    flex-shrink: 0;
+  }
+  .recipe-link:active { background: var(--platinum); }
+
+  /* ===== 買い物リスト ===== */
+  .shopping-list {
+    columns: 2;
+    column-gap: 12px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 12px;
+  }
+  .shopping-list li {
+    background: var(--platinum);
+    margin-bottom: 6px;
+    padding: 6px 8px;
+    break-inside: avoid;
+    color: var(--carbon-navy);
+  }
+
+  /* ===== フッター ===== */
+  .footer {
+    background: var(--carbon-navy);
+    padding: 16px;
+    text-align: center;
+    color: var(--platinum);
+    font-size: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  .empty-hint {
+    text-align: center;
+    color: var(--carbon-navy);
+    font-size: 13px;
+    padding: 30px 16px;
+    background: rgba(255,255,255,0.4);
+    margin: 16px;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="masthead">
+    <div class="logo-ball"></div>
+    <div class="masthead-title">Kondate System</div>
+  </div>
+
+  <div class="navbar">
+    <span>MENU</span>
+    <span>WEEKLY</span>
+    <span>SHOPPING</span>
+  </div>
+
+  <div class="hero">
+    <h1>こんだて<br>けいかく</h1>
+    <p>あなたの ばんごはんを おうえん!</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">こんだて せってい</div>
+    <div class="field">
+      <label for="ingredient-input">つかいたい しょくざい(にんにく なす など)</label>
+      <input type="text" id="ingredient-input" placeholder="例: 鶏むね肉, なす">
+    </div>
+    <div class="toggle-row">
+      <input type="checkbox" id="weekend-toggle">
+      <label for="weekend-toggle">どようび・にちようびも つくる</label>
+    </div>
+    <button class="btn btn-primary" id="generate-btn">こんだてを つくる!</button>
+  </div>
+
+  <div class="panel poke-panel" id="poke-panel">
+    <div class="panel-title">きょうの あいぼう</div>
+    <div class="poke-content" id="poke-content">
+      <div class="poke-loading">こんだてを つくると あいぼうが あらわれる!</div>
+    </div>
+  </div>
+
+  <div id="empty-hint" class="empty-hint">
+    「こんだてを つくる!」を おして<br>1しゅうかんぶんの ばんごはんを ていあん!
+  </div>
+
+  <div id="days-container"></div>
+
+  <div class="panel hidden" id="shopping-panel">
+    <div class="panel-title">おかいもの リスト</div>
+    <ul class="shopping-list" id="shopping-list"></ul>
+  </div>
+
+  <div class="footer">
+    NINTENDO風 こんだて けいかく<br>
+    powered by やさしい ばんごはん
+  </div>
+
+</div>
+
+<script src="recipes.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  const DAY_NAMES = ["月", "火", "水", "木", "金", "土", "日"];
+  const STORAGE_KEY = "kondate-app-last-menu";
+  const POKEMON_MAX_ID = 1025;
+
+  const ingredientInput = document.getElementById("ingredient-input");
+  const weekendToggle = document.getElementById("weekend-toggle");
+  const generateBtn = document.getElementById("generate-btn");
+  const daysContainer = document.getElementById("days-container");
+  const emptyHint = document.getElementById("empty-hint");
+  const shoppingPanel = document.getElementById("shopping-panel");
+  const shoppingList = document.getElementById("shopping-list");
+  const pokeContent = document.getElementById("poke-content");
+
+  let currentMenu = null; // { days: [{dayIndex, main, side, soup}], includeWeekend }
+
+  // ---------- ユーティリティ ----------
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function containsIngredient(recipe, keyword) {
+    return recipe.ingredients.some(ing => ing.includes(keyword)) || recipe.name.includes(keyword);
+  }
+
+  function parseIngredientKeywords() {
+    const raw = ingredientInput.value.trim();
+    if (!raw) return [];
+    return raw.split(/[,、\s]+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // ---------- 献立生成ロジック ----------
+
+  function pickDayDishes(usedProteins, usedGenres, keywords) {
+    const mains = getRecipesByCategory("main");
+    const sides = getRecipesByCategory("side");
+    const soups = getRecipesByCategory("soup");
+
+    const main = pickBest(mains, usedProteins, usedGenres, keywords, true);
+    const side = pickBest(sides, [], [], keywords, false);
+    const soup = pickBest(soups, [], [], keywords, false);
+
+    return { main, side, soup };
+  }
+
+  function pickBest(pool, usedProteins, usedGenres, keywords, isMain) {
+    let candidates = shuffle(pool);
+
+    // 1. 指定食材にマッチするものを最優先
+    if (keywords.length > 0) {
+      const matched = candidates.filter(r => keywords.some(kw => containsIngredient(r, kw)));
+      if (matched.length > 0) {
+        candidates = matched.concat(candidates.filter(r => !matched.includes(r)));
+      }
+    }
+
+    // 2. 主菜のみ: 直近と同じたんぱく源・ジャンルを避ける
+    if (isMain) {
+      const avoided = candidates.filter(r =>
+        !usedProteins.includes(r.protein) && !usedGenres.includes(r.genre)
+      );
+      if (avoided.length > 0) return avoided[0];
+
+      const partiallyAvoided = candidates.filter(r => !usedProteins.includes(r.protein));
+      if (partiallyAvoided.length > 0) return partiallyAvoided[0];
+    }
+
+    return candidates[0];
+  }
+
+  function generateMenu() {
+    const includeWeekend = weekendToggle.checked;
+    const keywords = parseIngredientKeywords();
+    const numDays = includeWeekend ? 7 : 5;
+
+    const days = [];
+    let recentProteins = [];
+    let recentGenres = [];
+
+    for (let i = 0; i < numDays; i++) {
+      const dishes = pickDayDishes(recentProteins, recentGenres, keywords);
+      days.push({ dayIndex: i, ...dishes });
+
+      recentProteins = [dishes.main.protein];
+      recentGenres = [dishes.main.genre];
+      if (days.length >= 2) {
+        recentProteins.push(days[days.length - 2].main.protein);
+      }
+    }
+
+    currentMenu = { days, includeWeekend };
+    saveMenu();
+    renderMenu();
+    fetchPokemon();
+  }
+
+  function rerollDay(dayIndex) {
+    if (!currentMenu) return;
+    const keywords = parseIngredientKeywords();
+    const prevDay = currentMenu.days[dayIndex - 1];
+    const usedProteins = prevDay ? [prevDay.main.protein] : [];
+    const usedGenres = prevDay ? [prevDay.main.genre] : [];
+
+    const dishes = pickDayDishes(usedProteins, usedGenres, keywords);
+    currentMenu.days[dayIndex] = { dayIndex, ...dishes };
+    saveMenu();
+    renderMenu();
+  }
+
+  // ---------- 描画 ----------
+
+  function categoryLabel(cat) {
+    if (cat === "main") return "しゅさい";
+    if (cat === "side") return "ふくさい";
+    if (cat === "soup") return "しるもの";
+    return cat;
+  }
+
+  function categoryBadgeClass(cat) {
+    if (cat === "main") return "badge-main";
+    if (cat === "side") return "badge-side";
+    if (cat === "soup") return "badge-soup";
+    return "";
+  }
+
+  function buildRecipeSearchUrl(name) {
+    const query = encodeURIComponent(name + " レシピ 2人分");
+    return "https://www.google.com/search?q=" + query;
+  }
+
+  function renderDish(dish) {
+    return (
+      '<div class="dish-row">' +
+        '<div class="dish-info">' +
+          '<span class="dish-cat-badge ' + categoryBadgeClass(dish.category) + '">' + categoryLabel(dish.category) + '</span>' +
+          '<span class="genre-badge">' + dish.genre + '</span>' +
+          '<span class="dish-name">' + escapeHtml(dish.name) + '</span>' +
+          '<div class="dish-memo">' + escapeHtml(dish.memo) + '</div>' +
+        '</div>' +
+        '<a class="recipe-link" href="' + buildRecipeSearchUrl(dish.name) + '" target="_blank" rel="noopener noreferrer">レシピを みる</a>' +
+      '</div>'
+    );
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function renderMenu() {
+    if (!currentMenu) {
+      daysContainer.innerHTML = "";
+      emptyHint.classList.remove("hidden");
+      shoppingPanel.classList.add("hidden");
+      return;
+    }
+
+    emptyHint.classList.add("hidden");
+    shoppingPanel.classList.remove("hidden");
+
+    daysContainer.innerHTML = currentMenu.days.map(day => {
+      const dayName = DAY_NAMES[day.dayIndex] + "ようび";
+      return (
+        '<div class="day-card">' +
+          '<div class="day-card-header">' +
+            '<span class="day-label">' + dayName + '</span>' +
+            '<button class="reroll-btn" data-day="' + day.dayIndex + '">ひきなおす</button>' +
+          '</div>' +
+          renderDish(day.main) +
+          renderDish(day.side) +
+          renderDish(day.soup) +
+        '</div>'
+      );
+    }).join("");
+
+    document.querySelectorAll(".reroll-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-day"), 10);
+        rerollDay(idx);
+      });
+    });
+
+    renderShoppingList();
+  }
+
+  function renderShoppingList() {
+    if (!currentMenu) return;
+    const allIngredients = new Set();
+    currentMenu.days.forEach(day => {
+      [day.main, day.side, day.soup].forEach(dish => {
+        dish.ingredients.forEach(ing => allIngredients.add(ing));
+      });
+    });
+    const sorted = Array.from(allIngredients).sort((a, b) => a.localeCompare(b, "ja"));
+    shoppingList.innerHTML = sorted.map(ing => "<li>" + escapeHtml(ing) + "</li>").join("");
+  }
+
+  // ---------- localStorage ----------
+
+  function saveMenu() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentMenu));
+    } catch (e) {
+      // 保存に失敗しても致命的ではないので無視
+    }
+  }
+
+  function loadMenu() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.days)) return parsed;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ---------- PokeAPI ----------
+
+  function renderPokemonPlaceholder() {
+    pokeContent.innerHTML =
+      '<div class="poke-sprite-wrap">⚪</div>' +
+      '<div class="poke-info">' +
+        '<div class="poke-name">モンスターボール</div>' +
+        '<div class="poke-cheer">きょうも げんきに いってきます!</div>' +
+      '</div>';
+  }
+
+  async function fetchPokemon() {
+    pokeContent.innerHTML = '<div class="poke-loading">あいぼうを よびだし中...</div>';
+
+    const id = Math.floor(Math.random() * POKEMON_MAX_ID) + 1;
+
+    try {
+      const [pokeRes, speciesRes] = await Promise.all([
+        fetch("https://pokeapi.co/api/v2/pokemon/" + id),
+        fetch("https://pokeapi.co/api/v2/pokemon-species/" + id)
+      ]);
+
+      if (!pokeRes.ok || !speciesRes.ok) throw new Error("fetch failed");
+
+      const pokeData = await pokeRes.json();
+      const speciesData = await speciesRes.json();
+
+      const jaNameEntry = (speciesData.names || []).find(n => n.language && n.language.name === "ja-Hrkt")
+        || (speciesData.names || []).find(n => n.language && n.language.name === "ja");
+      const name = jaNameEntry ? jaNameEntry.name : pokeData.name;
+
+      const sprite =
+        (pokeData.sprites && pokeData.sprites.front_default) ||
+        (pokeData.sprites && pokeData.sprites.other &&
+          pokeData.sprites.other["official-artwork"] &&
+          pokeData.sprites.other["official-artwork"].front_default);
+
+      if (!sprite) throw new Error("no sprite");
+
+      pokeContent.innerHTML =
+        '<div class="poke-sprite-wrap"><img src="' + sprite + '" alt="' + escapeHtml(name) + '"></div>' +
+        '<div class="poke-info">' +
+          '<div class="poke-name">' + escapeHtml(name) + '</div>' +
+          '<div class="poke-cheer">きょうの ばんごはん、おうえんしてるよ!</div>' +
+        '</div>';
+    } catch (e) {
+      renderPokemonPlaceholder();
+    }
+  }
+
+  // ---------- 初期化 ----------
+
+  generateBtn.addEventListener("click", generateMenu);
+
+  const saved = loadMenu();
+  if (saved) {
+    currentMenu = saved;
+    weekendToggle.checked = !!saved.includeWeekend;
+    renderMenu();
+    fetchPokemon();
+  } else {
+    renderPokemonPlaceholder();
+  }
+
+})();
+</script>
+</body>
+</html>
