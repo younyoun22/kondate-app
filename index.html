@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NINTENDO風 こんだて計画</title>
 <style>
   :root {
@@ -213,6 +213,7 @@
     min-height: 36px;
   }
   .btn-secondary:active { transform: translateY(1px); }
+  #single-day-btn { margin-top: 8px; }
 
   /* ===== ポケモンパネル ===== */
   .poke-panel {
@@ -339,6 +340,12 @@
     font-size: 13px;
     letter-spacing: 0.5px;
   }
+  .day-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
   .reroll-btn {
     background: var(--amber);
     color: var(--carbon-navy);
@@ -350,6 +357,27 @@
     letter-spacing: 0.3px;
   }
   .reroll-btn:active { transform: translateY(1px); }
+  .reroll-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .reroll-btn:disabled:active { transform: none; }
+  .keep-btn {
+    background: var(--platinum);
+    color: var(--carbon-navy);
+    border: none;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 6px 10px;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+  }
+  .keep-btn:active { transform: translateY(1px); }
+  .keep-btn.is-active {
+    background: var(--nintendo-red);
+    color: var(--white);
+    box-shadow: inset 0 0 0 2px var(--carbon-navy);
+  }
 
   .dish-row {
     display: flex;
@@ -384,25 +412,25 @@
     color: var(--carbon-navy);
   }
   .dish-name {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--carbon-navy);
     display: block;
     margin-top: 3px;
   }
   .dish-ingredients {
-    font-size: 10px;
+    font-size: 12px;
     color: #4a5578;
     margin-top: 3px;
     line-height: 1.4;
   }
   .dish-memo {
-    font-size: 11px;
+    font-size: 12px;
     color: #666;
     margin-top: 2px;
   }
   .recipe-link {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--chrome-indigo);
     text-decoration: none;
     font-weight: 700;
@@ -420,26 +448,69 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    font-size: 12px;
+    font-size: 13px;
   }
   .shopping-list li {
     background: var(--platinum);
     margin-bottom: 6px;
     padding: 6px 8px;
+    min-height: 44px;
     break-inside: avoid;
     color: var(--carbon-navy);
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     overflow-wrap: break-word;
     word-break: break-word;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .shopping-list li:active,
+  .seasoning-list li:active {
+    background: #cfd3d3;
+  }
+  .check-mark {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--chrome-indigo);
+    background: var(--white);
+    position: relative;
+  }
+  li.checked .check-mark {
+    background: var(--signal-orange);
+    border-color: var(--signal-orange);
+  }
+  li.checked .check-mark::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 0px;
+    width: 5px;
+    height: 9px;
+    border-right: 2px solid var(--white);
+    border-bottom: 2px solid var(--white);
+    transform: rotate(40deg);
+  }
+  .shop-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
   }
   .shop-name {
     font-weight: 700;
   }
   .shop-amount {
-    font-size: 11px;
+    font-size: 12px;
     color: #4a4a4a;
+  }
+  li.checked .shop-name,
+  li.checked .shop-amount {
+    text-decoration: line-through;
+    opacity: 0.5;
   }
 
   .seasoning-box {
@@ -460,17 +531,25 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    font-size: 11px;
+    font-size: 12px;
   }
   .seasoning-list li {
     background: #f4f6fb;
     border: 1px dashed var(--periwinkle);
     margin-bottom: 6px;
     padding: 5px 8px;
+    min-height: 44px;
     break-inside: avoid;
     color: var(--carbon-navy);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     overflow-wrap: break-word;
     word-break: break-word;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* ===== フッター ===== */
@@ -525,6 +604,7 @@
       <label for="weekend-toggle">どようび・にちようびも つくる</label>
     </div>
     <button class="btn btn-primary" id="generate-btn">こんだてを つくる!</button>
+    <button class="btn btn-secondary" id="single-day-btn">きょうの ぶんだけ</button>
   </div>
 
   <div class="panel poke-panel" id="poke-panel">
@@ -561,8 +641,10 @@
 (function () {
   "use strict";
 
-  const DAY_NAMES = ["月", "火", "水", "木", "金", "土", "日"];
-  const STORAGE_KEY = "kondate-app-last-menu-v2";
+  const WEEKDAY_KANJI = ["日", "月", "火", "水", "木", "金", "土"]; // Date#getDay() 準拠(0=日)
+  const STORAGE_KEY = "kondate-app-state-v3";
+  const HISTORY_KEY = "kondate-app-history-v3";
+  const HISTORY_MAX_GENERATIONS = 2;
   const POKEMON_MAX_ID = 1025;
 
   // 分量なしで「あるか確認する」だけの調味料・常備品まとめ枠に振り分ける食材名
@@ -585,8 +667,11 @@
   const shoppingList = document.getElementById("shopping-list");
   const seasoningList = document.getElementById("seasoning-list");
   const pokeContent = document.getElementById("poke-content");
+  const singleDayBtn = document.getElementById("single-day-btn");
 
-  let currentMenu = null; // { days: [{dayIndex, main, side, soup}], includeWeekend }
+  // currentMenu: { days: [{dayIndex, keep, main, side, soup}], includeWeekend, weekStart(ISO), isSingleDay }
+  let currentMenu = null;
+  let checkedSet = {}; // 買い物リストのチェック状態 "reg:食材名" / "sea:食材名" -> true
 
   // ---------- ユーティリティ ----------
 
@@ -609,27 +694,118 @@
     return raw.split(/[,、\s]+/).map(s => s.trim()).filter(Boolean);
   }
 
+  // ---------- 日付ユーティリティ ----------
+
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  // ローカル日付のYYYY-MM-DD文字列(タイムゾーンずれを避けるためtoISOStringは使わない)
+  function formatISODate(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  function parseISODate(iso) {
+    const parts = iso.split("-").map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  // 生成日が月〜金ならその週の月曜、土日なら翌週の月曜を基準週の開始日とする
+  function computeWeekStart(baseDate) {
+    const day = baseDate.getDay(); // 0=日, 1=月, ... 6=土
+    const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    if (day === 0) {
+      d.setDate(d.getDate() + 1); // 日曜 → 翌日(次週月曜)
+    } else if (day === 6) {
+      d.setDate(d.getDate() + 2); // 土曜 → 翌々日(次週月曜)
+    } else {
+      d.setDate(d.getDate() - (day - 1)); // 月〜金 → その週の月曜
+    }
+    return d;
+  }
+
+  function dayDate(menu, dayIndex) {
+    const start = parseISODate(menu.weekStart);
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    d.setDate(d.getDate() + dayIndex);
+    return d;
+  }
+
+  function formatDayLabel(dateObj) {
+    const m = dateObj.getMonth() + 1;
+    const d = dateObj.getDate();
+    const w = WEEKDAY_KANJI[dateObj.getDay()];
+    return m + "/" + d + "(" + w + "よう)";
+  }
+
+  // ---------- 履歴(週またぎの重複回避) ----------
+
+  function loadHistory() {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveHistory(history) {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {
+      // 保存に失敗しても致命的ではないので無視
+    }
+  }
+
+  // 直近HISTORY_MAX_GENERATIONS世代ぶんの料理名をまとめたSetを返す(ソフト除外用)
+  function getHistorySet() {
+    const history = loadHistory();
+    const set = new Set();
+    history.forEach(gen => gen.forEach(name => set.add(name)));
+    return set;
+  }
+
+  // 今回の生成で使った全料理名を新しい世代として履歴の先頭に積み、最大2世代まで保持
+  function pushHistoryGeneration(days) {
+    const names = [];
+    days.forEach(day => {
+      [day.main, day.side, day.soup].forEach(dish => names.push(dish.name));
+    });
+    const history = loadHistory();
+    const newHistory = [names].concat(history).slice(0, HISTORY_MAX_GENERATIONS);
+    saveHistory(newHistory);
+  }
+
   // ---------- 献立生成ロジック ----------
 
-  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames) {
+  function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet) {
     const mains = getRecipesByCategory("main");
     const sides = getRecipesByCategory("side");
     const soups = getRecipesByCategory("soup");
 
-    const main = pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames);
+    const main = pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet);
     usedNames.add(main.name);
-    const side = pickBest(sides, [], [], keywords, false, usedNames);
+    const side = pickBest(sides, [], [], keywords, false, usedNames, historySet);
     usedNames.add(side.name);
-    const soup = pickBest(soups, [], [], keywords, false, usedNames);
+    const soup = pickBest(soups, [], [], keywords, false, usedNames, historySet);
     usedNames.add(soup.name);
 
     return { main, side, soup };
   }
 
-  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames) {
+  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet) {
     // 週内で既に選ばれているレシピは除外(プールが尽きた場合は除外を緩める)
     let basePool = pool.filter(r => !usedNames.has(r.name));
     if (basePool.length === 0) basePool = pool;
+
+    // 過去2回の生成で使ったレシピもソフト除外(候補が尽きたら緩めて許可する)
+    if (historySet && historySet.size > 0) {
+      const historyFreePool = basePool.filter(r => !historySet.has(r.name));
+      if (historyFreePool.length > 0) basePool = historyFreePool;
+    }
 
     let candidates = shuffle(basePool);
 
@@ -660,50 +836,116 @@
     const keywords = parseIngredientKeywords();
     const numDays = includeWeekend ? 7 : 5;
 
+    const weekStart = computeWeekStart(new Date());
+    const weekStartISO = formatISODate(weekStart);
+
+    // キープ中の日は残す(その週数に収まる範囲のみ)
+    const oldDays = (currentMenu && !currentMenu.isSingleDay) ? currentMenu.days : [];
+    const keptDays = oldDays.filter(d => d.keep && d.dayIndex < numDays);
+
+    const usedNames = new Set();
+    keptDays.forEach(d => {
+      [d.main, d.side, d.soup].forEach(dish => usedNames.add(dish.name));
+    });
+
+    const historySet = getHistorySet();
+
     const days = [];
     let recentProteins = [];
     let recentGenres = [];
-    const usedNames = new Set();
 
     for (let i = 0; i < numDays; i++) {
-      const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames);
-      days.push({ dayIndex: i, ...dishes });
+      const kept = keptDays.find(d => d.dayIndex === i);
+      let day;
+      if (kept) {
+        day = kept;
+      } else {
+        const dishes = pickDayDishes(recentProteins, recentGenres, keywords, usedNames, historySet);
+        day = { dayIndex: i, keep: false, ...dishes };
+      }
+      days.push(day);
 
-      recentProteins = [dishes.main.protein];
-      recentGenres = [dishes.main.genre];
+      recentProteins = [day.main.protein];
+      recentGenres = [day.main.genre];
       if (days.length >= 2) {
         recentProteins.push(days[days.length - 2].main.protein);
       }
     }
 
-    currentMenu = { days, includeWeekend };
-    saveMenu();
+    currentMenu = { days, includeWeekend, weekStart: weekStartISO, isSingleDay: false };
+    resetCheckedState();
+    pushHistoryGeneration(days);
+    saveState();
+    renderMenu();
+    fetchPokemon();
+  }
+
+  // 「きょうの ぶんだけ」: 今日1日分(主菜・副菜・汁物)だけを生成する軽量モード
+  function generateSingleDayMenu() {
+    const keywords = parseIngredientKeywords();
+    const today = new Date();
+    const todayISO = formatISODate(today);
+    const historySet = getHistorySet();
+    const usedNames = new Set();
+
+    const dishes = pickDayDishes([], [], keywords, usedNames, historySet);
+    const day = { dayIndex: 0, keep: false, ...dishes };
+
+    currentMenu = { days: [day], includeWeekend: false, weekStart: todayISO, isSingleDay: true };
+    resetCheckedState();
+    saveState();
     renderMenu();
     fetchPokemon();
   }
 
   function rerollDay(dayIndex) {
     if (!currentMenu) return;
+    const day = currentMenu.days.find(d => d.dayIndex === dayIndex);
+    if (!day || day.keep) return; // キープ中は引き直し不可
+
     const keywords = parseIngredientKeywords();
-    const prevDay = currentMenu.days[dayIndex - 1];
+    const prevDay = currentMenu.days.find(d => d.dayIndex === dayIndex - 1);
     const usedProteins = prevDay ? [prevDay.main.protein] : [];
     const usedGenres = prevDay ? [prevDay.main.genre] : [];
 
     // その週の他の日で使用中のレシピ + 引き直し前のその日の3品を除外
-    const oldDay = currentMenu.days[dayIndex];
     const usedNames = new Set();
-    currentMenu.days.forEach((day, idx) => {
-      if (idx === dayIndex) return;
-      [day.main, day.side, day.soup].forEach(d => usedNames.add(d.name));
+    currentMenu.days.forEach(d => {
+      if (d.dayIndex === dayIndex) return;
+      [d.main, d.side, d.soup].forEach(dish => usedNames.add(dish.name));
     });
-    if (oldDay) {
-      [oldDay.main, oldDay.side, oldDay.soup].forEach(d => usedNames.add(d.name));
-    }
+    [day.main, day.side, day.soup].forEach(dish => usedNames.add(dish.name));
 
-    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames);
-    currentMenu.days[dayIndex] = { dayIndex, ...dishes };
-    saveMenu();
+    const historySet = getHistorySet();
+    const dishes = pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet);
+    const idx = currentMenu.days.indexOf(day);
+    currentMenu.days[idx] = { dayIndex, keep: false, ...dishes };
+    resetCheckedState();
+    saveState();
     renderMenu();
+  }
+
+  function toggleKeep(dayIndex) {
+    if (!currentMenu) return;
+    const day = currentMenu.days.find(d => d.dayIndex === dayIndex);
+    if (!day) return;
+    day.keep = !day.keep;
+    saveState();
+    renderMenu();
+  }
+
+  function toggleChecked(key) {
+    if (checkedSet[key]) {
+      delete checkedSet[key];
+    } else {
+      checkedSet[key] = true;
+    }
+    saveState();
+    renderShoppingList();
+  }
+
+  function resetCheckedState() {
+    checkedSet = {};
   }
 
   // ---------- 描画 ----------
@@ -764,12 +1006,18 @@
     shoppingPanel.classList.remove("hidden");
 
     daysContainer.innerHTML = currentMenu.days.map(day => {
-      const dayName = DAY_NAMES[day.dayIndex] + "ようび";
+      const dayLabel = formatDayLabel(dayDate(currentMenu, day.dayIndex));
+      const kept = !!day.keep;
       return (
         '<div class="day-card">' +
           '<div class="day-card-header">' +
-            '<span class="day-label">' + dayName + '</span>' +
-            '<button class="reroll-btn" data-day="' + day.dayIndex + '">ひきなおす</button>' +
+            '<span class="day-label">' + escapeHtml(dayLabel) + '</span>' +
+            '<div class="day-card-actions">' +
+              '<button class="keep-btn' + (kept ? ' is-active' : '') + '" data-day="' + day.dayIndex + '">' +
+                (kept ? '🔒 キープ中' : 'キープ') +
+              '</button>' +
+              '<button class="reroll-btn" data-day="' + day.dayIndex + '"' + (kept ? ' disabled' : '') + '>ひきなおす</button>' +
+            '</div>' +
           '</div>' +
           renderDish(day.main) +
           renderDish(day.side) +
@@ -782,6 +1030,13 @@
       btn.addEventListener("click", () => {
         const idx = parseInt(btn.getAttribute("data-day"), 10);
         rerollDay(idx);
+      });
+    });
+
+    document.querySelectorAll(".keep-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-day"), 10);
+        toggleKeep(idx);
       });
     });
 
@@ -919,34 +1174,59 @@
     const regularNames = Array.from(regularMap.keys()).sort((a, b) => a.localeCompare(b, "ja"));
     shoppingList.innerHTML = regularNames.map(name => {
       const amountText = aggregateAmounts(regularMap.get(name));
+      const key = "reg:" + name;
+      const isChecked = !!checkedSet[key];
       return (
-        "<li>" +
-          '<span class="shop-name">' + escapeHtml(name) + "</span>" +
-          '<span class="shop-amount">' + escapeHtml(amountText) + "</span>" +
+        '<li class="' + (isChecked ? "checked" : "") + '" data-key="' + escapeHtml(key) + '">' +
+          '<span class="check-mark" aria-hidden="true"></span>' +
+          '<span class="shop-text">' +
+            '<span class="shop-name">' + escapeHtml(name) + "</span>" +
+            '<span class="shop-amount">' + escapeHtml(amountText) + "</span>" +
+          '</span>' +
         "</li>"
       );
     }).join("");
 
     const seasoningNames = Array.from(seasoningSet).sort((a, b) => a.localeCompare(b, "ja"));
-    seasoningList.innerHTML = seasoningNames.map(name => "<li>" + escapeHtml(name) + "</li>").join("");
+    seasoningList.innerHTML = seasoningNames.map(name => {
+      const key = "sea:" + name;
+      const isChecked = !!checkedSet[key];
+      return (
+        '<li class="' + (isChecked ? "checked" : "") + '" data-key="' + escapeHtml(key) + '">' +
+          '<span class="check-mark" aria-hidden="true"></span>' +
+          '<span class="shop-text"><span class="shop-name">' + escapeHtml(name) + '</span></span>' +
+        "</li>"
+      );
+    }).join("");
+
+    document.querySelectorAll("#shopping-list li[data-key], #seasoning-list li[data-key]").forEach(li => {
+      li.addEventListener("click", () => {
+        toggleChecked(li.getAttribute("data-key"));
+      });
+    });
   }
 
   // ---------- localStorage ----------
 
-  function saveMenu() {
+  function saveState() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentMenu));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ menu: currentMenu, checked: checkedSet }));
     } catch (e) {
       // 保存に失敗しても致命的ではないので無視
     }
   }
 
-  function loadMenu() {
+  function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.days)) return parsed;
+      if (parsed && parsed.menu && Array.isArray(parsed.menu.days)) {
+        return {
+          menu: parsed.menu,
+          checked: (parsed.checked && typeof parsed.checked === "object") ? parsed.checked : {}
+        };
+      }
       return null;
     } catch (e) {
       return null;
@@ -1057,11 +1337,15 @@
   // ---------- 初期化 ----------
 
   generateBtn.addEventListener("click", generateMenu);
+  singleDayBtn.addEventListener("click", generateSingleDayMenu);
 
-  const saved = loadMenu();
+  const saved = loadState();
   if (saved) {
-    currentMenu = saved;
-    weekendToggle.checked = !!saved.includeWeekend;
+    currentMenu = saved.menu;
+    checkedSet = saved.checked;
+    if (!currentMenu.isSingleDay) {
+      weekendToggle.checked = !!currentMenu.includeWeekend;
+    }
     renderMenu();
     fetchPokemon();
   } else {
