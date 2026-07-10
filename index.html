@@ -929,21 +929,21 @@
     "にんにく", "しょうが", "だし", "昆布だし", "昆布茶", "乾燥ハーブ", "お湯"
   ];
 
-  // 月(1〜12) → 旬の食材キーワードのリスト。recipes.js(全260品)に実際に登場する食材名の表記に合わせてある。
+  // 月(1〜12) → 旬の食材キーワードのリスト。recipes.js(全320品)に実際に登場する食材名の表記に合わせてある。
   // 生成時の候補順のソフト優先、および献立カードの「旬」バッジ表示に使う。
   const SEASONAL = {
-    1: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "さば", "生鮭"],
-    2: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "さば", "たら"],
-    3: ["たけのこ", "アスパラガス", "桜えび", "三つ葉", "あさり", "しじみ", "わかめ", "キャベツ"],
-    4: ["たけのこ", "アスパラガス", "キャベツ", "にら", "三つ葉", "あさり", "しじみ", "わかめ"],
-    5: ["アスパラガス", "にら", "きゅうり", "キャベツ", "ズッキーニ", "オクラ", "あじ", "三つ葉"],
+    1: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "さば", "生鮭", "小松菜"],
+    2: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "さば", "たら", "小松菜", "菜の花"],
+    3: ["たけのこ", "アスパラガス", "桜えび", "三つ葉", "あさり", "しじみ", "わかめ", "キャベツ", "菜の花", "新玉ねぎ", "新じゃがいも"],
+    4: ["たけのこ", "アスパラガス", "キャベツ", "にら", "三つ葉", "あさり", "しじみ", "わかめ", "新玉ねぎ", "新じゃがいも", "かつおのたたき"],
+    5: ["アスパラガス", "にら", "きゅうり", "キャベツ", "ズッキーニ", "オクラ", "あじ", "三つ葉", "新玉ねぎ", "新じゃがいも", "かつおのたたき"],
     6: ["なす", "きゅうり", "ピーマン", "オクラ", "ズッキーニ", "にら", "あじ", "梅干し"],
     7: ["なす", "トマト", "きゅうり", "ピーマン", "ゴーヤ", "オクラ", "あじ", "ズッキーニ", "みょうが", "枝豆"],
     8: ["なす", "トマト", "きゅうり", "ピーマン", "ゴーヤ", "オクラ", "あじ", "いわし", "みょうが", "枝豆"],
-    9: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "さんま", "かぼちゃ", "れんこん"],
-    10: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "さんま", "かぼちゃ", "れんこん", "さば", "ごぼう"],
-    11: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "かぼちゃ", "れんこん", "ごぼう", "白菜", "大根", "生鮭"],
-    12: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "生鮭", "かぼちゃ"]
+    9: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "さんま", "かぼちゃ", "れんこん", "まいたけ", "さつまいも", "生鮭", "かぶ"],
+    10: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "さんま", "かぼちゃ", "れんこん", "さば", "ごぼう", "まいたけ", "さつまいも", "生鮭", "かぶ"],
+    11: ["きのこ", "しめじ", "えのき", "しいたけ", "なめこ", "きくらげ", "エリンギ", "かぼちゃ", "れんこん", "ごぼう", "白菜", "大根", "生鮭", "まいたけ", "さつまいも"],
+    12: ["白菜", "大根", "ほうれん草", "ぶり", "かぶ", "長ねぎ", "水菜", "れんこん", "生鮭", "かぼちゃ", "小松菜"]
   };
 
   const ingredientInput = document.getElementById("ingredient-input");
@@ -1175,18 +1175,34 @@
     };
   }
 
+  // 1日3品(主菜・副菜・汁物)のうち、候補プールに旬レシピがある限り最低この品数は旬食材を含む
+  // 料理になるようにする(日ごとの旬クォータ)。主菜を最優先で旬にし、候補が足りなければ
+  // 1品→0品と静かに緩和する(キーワード指定・さける食材・時間しばり・重複回避は常に優先)。
+  const SEASONAL_DAILY_QUOTA = 2;
+
   // presetDishes: { main?, side?, soup? } を渡すと、そのカテゴリは抽選せずそのまま採用する(料理単位キープ用)
   function pickDayDishes(usedProteins, usedGenres, keywords, usedNames, historySet, presetDishes, opts) {
     const preset = presetDishes || {};
     const mains = getRecipesByCategory("main");
     const sides = getRecipesByCategory("side");
     const soups = getRecipesByCategory("soup");
+    const seasonalKeywords = (opts && opts.seasonalKeywords) || [];
 
-    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet, opts);
+    // キープ済みで動かせない品は、既に旬クォータを満たしている分として先に数えておく
+    let neededSeasonal = SEASONAL_DAILY_QUOTA;
+    if (preset.main && isSeasonalRecipe(preset.main, seasonalKeywords)) neededSeasonal--;
+    if (preset.side && isSeasonalRecipe(preset.side, seasonalKeywords)) neededSeasonal--;
+    if (preset.soup && isSeasonalRecipe(preset.soup, seasonalKeywords)) neededSeasonal--;
+
+    const main = preset.main || pickBest(mains, usedProteins, usedGenres, keywords, true, usedNames, historySet, opts, neededSeasonal > 0);
     usedNames.add(main.name);
-    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet, opts);
+    if (!preset.main && isSeasonalRecipe(main, seasonalKeywords)) neededSeasonal--;
+
+    const side = preset.side || pickBest(sides, [], [], keywords, false, usedNames, historySet, opts, neededSeasonal > 0);
     usedNames.add(side.name);
-    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet, opts);
+    if (!preset.side && isSeasonalRecipe(side, seasonalKeywords)) neededSeasonal--;
+
+    const soup = preset.soup || pickBest(soups, [], [], keywords, false, usedNames, historySet, opts, neededSeasonal > 0);
     usedNames.add(soup.name);
 
     return { main, side, soup };
@@ -1199,7 +1215,7 @@
     return [Infinity];
   }
 
-  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet, opts) {
+  function pickBest(pool, usedProteins, usedGenres, keywords, isMain, usedNames, historySet, opts, forceSeasonal) {
     const options = opts || {};
     const timeFilterValue = options.timeFilterValue;
     const avoidIngredients = options.avoidList || [];
@@ -1229,19 +1245,32 @@
 
       let candidates = shuffle(basePool);
 
-      // 1. 指定食材にマッチするものを最優先
+      // 1. 指定食材にマッチするものを最優先(見つからなければ何もせず全体のまま)
+      let keywordMatched = null;
       if (keywords.length > 0) {
         const matched = candidates.filter(r => keywords.some(kw => containsIngredient(r, kw)));
         if (matched.length > 0) {
+          keywordMatched = matched;
           candidates = matched.concat(candidates.filter(r => !matched.includes(r)));
         }
       }
 
-      // 1.5 指定食材の次に、今月の旬食材を含むレシピをソフトに前へ出す
+      // 1.5 旬優先。forceSeasonal(日ごとの旬クォータ用)の場合は、指定食材にもマッチする旬候補が
+      // あればそこまで絞り込み、無ければ全体から旬候補を探して絞り込む(=ハード優先)。
+      // 旬候補が1つも無ければ何もせず元の並びのまま進み、クォータは静かに緩和される。
+      // forceSeasonalでない場合(通常のリロール等)は従来どおり旬を少し前に出すだけのソフト優先。
       if (seasonalKeywords.length > 0) {
-        const seasonal = candidates.filter(r => isSeasonalRecipe(r, seasonalKeywords));
-        if (seasonal.length > 0) {
-          candidates = seasonal.concat(candidates.filter(r => !seasonal.includes(r)));
+        if (forceSeasonal) {
+          const basis = keywordMatched || candidates;
+          const seasonalForced = basis.filter(r => isSeasonalRecipe(r, seasonalKeywords));
+          if (seasonalForced.length > 0) {
+            candidates = seasonalForced;
+          }
+        } else {
+          const seasonal = candidates.filter(r => isSeasonalRecipe(r, seasonalKeywords));
+          if (seasonal.length > 0) {
+            candidates = seasonal.concat(candidates.filter(r => !seasonal.includes(r)));
+          }
         }
       }
 
